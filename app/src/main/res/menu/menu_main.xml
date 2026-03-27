@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/timeInt"
+        android:title="Thread Time Interval" />
+    <item
+        android:id="@+id/domainChange"
+        android:title="Change API Link" />
+    <item
+        android:id="@+id/exitApp"
+        android:title="Exit" />
+</menu>

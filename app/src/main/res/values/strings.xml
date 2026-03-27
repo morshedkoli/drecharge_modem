@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">dRecharge Modem v1</string>
+    <string name="service_atr">Enable permissions for use USSD displays. From eng.jakir.controller</string>
+    <string name="ussd_service_description">Enable this accessibility service to automatically read and process USSD dialer responses for balance check and recharge.</string>
+
+    <string name="airtel_failed_msg">Airtel no-er offer dekhte dial</string>
+    <string name="robi_failed_msg">Apnar robi no-er offer dekhte dial korun</string>
+    <string name="banglalink_failed_msg">Your request cannot be processed at this time</string>
+    <string name="grameen_failed_msg">This service is not available</string>
+</resources>
