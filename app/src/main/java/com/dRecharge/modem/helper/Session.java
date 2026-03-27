@@ -37,6 +37,7 @@ public class Session {
     public static final String SIM1_SERVICE_CODE = "sim1ServiceCode";
     public static final String SIM1_SERVICE = "sim1service";
     public static final String SIM1_SERVICE_NAME = "sim1servicename";
+    public static final String SIM1_ENABLED = "sim1Enabled";
 
     // SIM 2 SESSION DATA
     public static final String SIM2_ID = "sim2id";
@@ -47,6 +48,7 @@ public class Session {
     public static final String SIM2_SERVICE_CODE = "sim2ServiceCode";
     public static final String SIM2_SERVICE = "sim2service";
     public static final String SIM2_SERVICE_NAME = "sim2serviceame";
+    public static final String SIM2_ENABLED = "sim2Enabled";
 
     //Common
     public static final String TIME_INTERVAL = "timeInterval";
@@ -64,6 +66,10 @@ public class Session {
 
     public int getIntData(String id) {
         return pref.getInt(id,-1);
+    }
+
+    public boolean getBooleanData(String id) {
+        return pref.getBoolean(id, false);
     }
 
     public void setData(String id, String val) {

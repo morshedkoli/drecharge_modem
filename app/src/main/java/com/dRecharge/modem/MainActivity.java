@@ -35,6 +35,7 @@ import android.widget.Toast;
 import com.dRecharge.modem.apimodel.InsertMessageModel;
 import com.dRecharge.modem.databinding.ActivityMainBinding;
 import com.dRecharge.modem.helper.Constant;
+import com.dRecharge.modem.helper.ServiceCatalog;
 import com.dRecharge.modem.helper.Session;
 import com.dRecharge.modem.receiver.SMSBReceiver;
 import com.dRecharge.modem.server.ModemServerRepository;
@@ -147,6 +148,7 @@ public class MainActivity extends AppCompatActivity {
         activityMainBinding = DataBindingUtil.setContentView(this, R.layout.activity_main);
         ins = this;
         contextOfApplication = getApplicationContext();
+        findViewById(R.id.homeSettingsBtn).setOnClickListener(v -> openSettingsScreen());
 
         session = new Session(MainActivity.this);
         ussdApi = USSDController.getInstance(contextOfApplication);
@@ -166,10 +168,21 @@ public class MainActivity extends AppCompatActivity {
         sim2Setting();
         getsSimServiceInfo();
         serviceOnOff();
+        reloadHomeFromSession();
 
 
         screenExe = new Timer();
         screenExe.schedule(screenOn(), 0, 15000);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (activityMainBinding != null && session != null) {
+            refreshServerRepository();
+            getsSimServiceInfo();
+            reloadHomeFromSession();
+        }
     }
 
     private TimerTask screenOn() {
@@ -189,6 +202,94 @@ public class MainActivity extends AppCompatActivity {
 
     public static MainActivity getMainActivityInstance() {
         return ins;
+    }
+
+    private void openSettingsScreen() {
+        startActivity(new Intent(this, SettingsActivity.class));
+    }
+
+    private void reloadHomeFromSession() {
+        updateSimConfigurationSummary();
+        syncEnabledSwitchesFromSession();
+    }
+
+    private void updateSimConfigurationSummary() {
+        String intervalText = defaultIfEmpty(session.getData(Session.TIME_INTERVAL), "30");
+
+        savedSim1Pin = session.getData(Session.SIM1_PIN);
+        savedSim1Time = session.getData(Session.SIM1_TIME);
+        savedSim1Bal = defaultIfEmpty(session.getData(Session.SIM1_MIN_BAL), "0");
+        savedSim1ServiceCode = session.getData(Session.SIM1_SERVICE_CODE);
+        savedSim1Service = safeParseInt(session.getData(Session.SIM1_SERVICE), 0);
+        savedSim1ServiceName = session.getData(Session.SIM1_SERVICE_NAME);
+        sim1Num = defaultIfEmpty(session.getData(Session.SIM1_NUMBER), sim1Num);
+        activityMainBinding.pin1Tv.setText("PIN: " + maskPin(savedSim1Pin));
+        activityMainBinding.minIntrval1Tv.setText("Interval: " + intervalText + " seconds");
+        activityMainBinding.minBal1Tv.setText("Balance Limit: " + savedSim1Bal);
+        if (activityMainBinding.service1Sp.getAdapter() != null) {
+            activityMainBinding.service1Sp.setSelection(ServiceCatalog.indexOf(savedSim1ServiceName));
+        }
+
+        savedSim2Pin = session.getData(Session.SIM2_PIN);
+        savedSim2Time = session.getData(Session.SIM2_TIME);
+        savedSim2Bal = defaultIfEmpty(session.getData(Session.SIM2_MIN_BAL), "0");
+        savedSim2ServiceCode = session.getData(Session.SIM2_SERVICE_CODE);
+        savedSim2Service = safeParseInt(session.getData(Session.SIM2_SERVICE), 0);
+        savedSim2ServiceName = session.getData(Session.SIM2_SERVICE_NAME);
+        sim2Num = defaultIfEmpty(session.getData(Session.SIM2_NUMBER), sim2Num);
+        activityMainBinding.pin2Tv.setText("PIN: " + maskPin(savedSim2Pin));
+        activityMainBinding.minIntrval2Tv.setText("Interval: " + intervalText + " seconds");
+        activityMainBinding.minBal2Tv.setText("Balance Limit: " + savedSim2Bal);
+        if (activityMainBinding.service2Sp.getAdapter() != null) {
+            activityMainBinding.service2Sp.setSelection(ServiceCatalog.indexOf(savedSim2ServiceName));
+        }
+
+        updateSimLabels();
+    }
+
+    private void updateSimLabels() {
+        activityMainBinding.sim1Tv.setText(buildSimLabel(sim1, sim1Num, sim1Id, savedSim1ServiceName));
+        activityMainBinding.sim2Tv.setText(buildSimLabel(sim2, sim2Num, sim2Id, savedSim2ServiceName));
+
+        boolean sim1Configured = session.isSim1Valid();
+        activityMainBinding.Sim1Layout.setVisibility(sim1Configured ? View.VISIBLE : View.GONE);
+        activityMainBinding.sim1Status.setVisibility(sim1Configured ? View.GONE : View.VISIBLE);
+
+        boolean sim2Configured = session.isSim2Valid();
+        activityMainBinding.simId2Layout.setVisibility((sim2Id >= 0 || sim2Configured) ? View.VISIBLE : View.GONE);
+        activityMainBinding.Sim2Layout.setVisibility(sim2Configured ? View.VISIBLE : View.GONE);
+        activityMainBinding.sim2Status.setVisibility(sim2Configured ? View.GONE : View.VISIBLE);
+    }
+
+    private void syncEnabledSwitchesFromSession() {
+        activityMainBinding.status1Sw.setChecked(session.getBooleanData(Session.SIM1_ENABLED));
+        activityMainBinding.status2Sw.setChecked(session.getBooleanData(Session.SIM2_ENABLED));
+    }
+
+    private String buildSimLabel(String carrier, String number, int id, String serviceName) {
+        String safeCarrier = defaultIfEmpty(carrier, "SIM");
+        String safeNumber = defaultIfEmpty(number, "Not set");
+        String safeService = defaultIfEmpty(serviceName, "No service selected");
+        return safeCarrier + " | " + safeNumber + " | Slot: " + id + " | " + safeService;
+    }
+
+    private String defaultIfEmpty(String value, String fallback) {
+        return value == null || value.trim().isEmpty() ? fallback : value;
+    }
+
+    private int safeParseInt(String value, int fallback) {
+        try {
+            return Integer.parseInt(value);
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private String maskPin(String pin) {
+        if (pin == null || pin.trim().isEmpty()) {
+            return "Not set";
+        }
+        return "****";
     }
 
     //region Settings And Service
@@ -590,21 +691,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void addListenerOnSpinnerItemSelection() {
-        final List<String> serviceList = new ArrayList<>();
-        serviceList.add("Select One");
-        serviceList.add("Grameen");
-        serviceList.add("Robi");
-        serviceList.add("Airtel");
-        serviceList.add("bLink");
-        serviceList.add("Taletalk");
-        serviceList.add("bKash-Load");
-        serviceList.add("Nagad-Load");
-        serviceList.add("bKash-Agent-SIM");
-        serviceList.add("bKash-Personal-SIM");
-        serviceList.add("Roket-Agent-SIM");
-        serviceList.add("Roket-Personal-SIM");
-        serviceList.add("Nagad-Agent-SIM");
-        serviceList.add("Nagad-Personal-SIM");
+        final List<String> serviceList = new ArrayList<>(ServiceCatalog.getServices());
 
         ArrayAdapter<String> serviceAdapter;
         serviceAdapter = new ArrayAdapter(MainActivity.this, android.R.layout.simple_spinner_item, serviceList);
@@ -661,142 +748,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void sim1Setting() {
-        activityMainBinding.sim1SettingImg.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-
-                AlertDialog.Builder mBuilder = new AlertDialog.Builder(MainActivity.this);
-                View mView = getLayoutInflater().inflate(R.layout.sim_setting, null);
-
-                mBuilder.setView(mView);
-                final AlertDialog dialog = mBuilder.create();
-                dialog.show();
-
-                final TextView simInfoTv = mView.findViewById(R.id.siminfoTv);
-                final EditText simNumberEt = mView.findViewById(R.id.simNumberEt);
-                final EditText simPinEt = mView.findViewById(R.id.simPinEt);
-                final EditText simminBalEt = mView.findViewById(R.id.simminBalEt);
-                final EditText simTimeIntEt = mView.findViewById(R.id.simTimeIntEt);
-                Button simsettingOkbtn = mView.findViewById(R.id.simsettingOkbtn);
-                Button simsettingCancelbtn = mView.findViewById(R.id.simsettingCancelbtn);
-
-                simInfoTv.setText("Sim-1: " + sim1 + " | " + sim1Num);
-
-                // show edit text old data
-                if (savedSim1Pin != null && sim1Num != null) {
-                    simNumberEt.setText(sim1Num);
-                    simPinEt.setText(savedSim1Pin);
-                }
-
-                simsettingCancelbtn.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        dialog.dismiss();
-                    }
-                });
-
-                simsettingOkbtn.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        if (!simPinEt.getText().toString().isEmpty()) {
-
-                            String sim1NumberEt = simNumberEt.getText().toString();
-                            String sim1Pin = simPinEt.getText().toString();
-                            String sim1MinBal = simminBalEt.getText().toString();
-                            String sim1Time = simTimeIntEt.getText().toString();
-                            activityMainBinding.pin1Tv.setText(sim1Pin);
-                            activityMainBinding.minIntrval1Tv.setText("ইন্টারভাল: " + sim1Time + " সেকেন্ড");
-                            activityMainBinding.minBal1Tv.setText("Balance Limit: " + sim1MinBal);
-
-                            sim1Num = sim1NumberEt;
-                            savedSim1Pin = sim1Pin;
-                            savedSim1Time = sim1Time;
-                            savedSim1Bal = sim1MinBal;
-
-                            Log.d("USD_SIM_UPDATE",sim1Num);
-                            Log.d("USD_SIM_UPDATE",savedSim1Pin);
-                            session.SetSim1Info(true, sim1NumberEt, sim1Pin, sim1MinBal, sim1Time);
-                            Toast.makeText(MainActivity.this, "Sim 1 Info saved!", Toast.LENGTH_SHORT).show();
-                            activityMainBinding.sim1Tv.setText(sim1 + "  | " + sim1Num + " | Id: " + sim1Id);
-                            dialog.dismiss();
-
-                        } else {
-                            Toast.makeText(MainActivity.this, "Please fill up all the field", Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-            }
-        });
+        activityMainBinding.sim1SettingImg.setOnClickListener(view -> openSettingsScreen());
     }
 
     private void sim2Setting() {
-        activityMainBinding.sim2SettingImg.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-
-                AlertDialog.Builder mBuilder = new AlertDialog.Builder(MainActivity.this);
-                View mView = getLayoutInflater().inflate(R.layout.sim_setting, null);
-
-                mBuilder.setView(mView);
-                final AlertDialog dialog = mBuilder.create();
-                dialog.show();
-
-                final TextView simInfoTv = mView.findViewById(R.id.siminfoTv);
-                final EditText simNumberEt = mView.findViewById(R.id.simNumberEt);
-                final EditText simPinEt = mView.findViewById(R.id.simPinEt);
-                final EditText simminBalEt = mView.findViewById(R.id.simminBalEt);
-                final EditText simTimeIntEt = mView.findViewById(R.id.simTimeIntEt);
-                Button simsettingOkbtn = mView.findViewById(R.id.simsettingOkbtn);
-                Button simsettingCancelbtn = mView.findViewById(R.id.simsettingCancelbtn);
-
-                simInfoTv.setText("Sim-2: " + sim2 + " | " + sim2Num);
-
-                // show edit text old data
-
-                if (savedSim2Pin != null && sim2Num != null) {
-                    simNumberEt.setText(sim2Num);
-                    simPinEt.setText(savedSim2Pin);
-                }
-
-
-                simsettingCancelbtn.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        dialog.dismiss();
-                    }
-                });
-
-                simsettingOkbtn.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View view) {
-                        if (!simPinEt.getText().toString().isEmpty()) {
-
-                            String sim2NumberEt = simNumberEt.getText().toString();
-                            String sim2Pin = simPinEt.getText().toString();
-                            String sim2MinBal = simminBalEt.getText().toString();
-                            String sim2Time = simTimeIntEt.getText().toString();
-                            activityMainBinding.pin2Tv.setText(sim2Pin);
-//                            activityMainBinding.minIntrval2Tv.setText("Interval: " + sim2Time);
-                            activityMainBinding.minBal2Tv.setText("Balance Limit: " + sim2MinBal);
-
-                            sim2Num = sim2NumberEt;
-                            savedSim2Pin = sim2Pin;
-                            savedSim2Time = sim2Time;
-                            savedSim2Bal = sim2MinBal;
-
-                            session.SetSim2Info(true, sim2NumberEt, sim2Pin, sim2MinBal, savedSim2Time);
-                            Toast.makeText(MainActivity.this, "Sim 2 Info saved!", Toast.LENGTH_SHORT).show();
-                            activityMainBinding.sim1Tv.setText(sim1 + "  | " + sim1Num + " | Id: " + sim1Id);
-                            activityMainBinding.sim2Tv.setText(sim2 + "  | " + sim2Num + " | Id: " + sim2Id);
-                            dialog.dismiss();
-
-                        } else {
-                            Toast.makeText(MainActivity.this, "Please fill up all the field", Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-            }
-        });
+        activityMainBinding.sim2SettingImg.setOnClickListener(view -> openSettingsScreen());
     }
 
     private void simServiceSelect() {
@@ -808,58 +764,17 @@ public class MainActivity extends AppCompatActivity {
             public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
                 Log.e("USD_SERVICE ::POSITION",adapterView.getItemAtPosition(i).toString());
 
-                if (adapterView.getItemAtPosition(i).equals(0)) {
-
-                } else {
+                String serviceName = String.valueOf(adapterView.getItemAtPosition(i));
+                if (!ServiceCatalog.SELECT_ONE.equals(serviceName)) {
                     int selectItem = adapterView.getSelectedItemPosition();
                     Log.d("USD_SERVICE", String.valueOf(selectItem));
-                    Log.d("USD_SERVICE_NAME", adapterView.getItemAtPosition(i).toString());
+                    Log.d("USD_SERVICE_NAME", serviceName);
                     session.setData(Session.SIM1_SERVICE, String.valueOf(selectItem));
-                    session.setData(Session.SIM1_SERVICE_NAME, adapterView.getItemAtPosition(i).toString());
+                    session.setData(Session.SIM1_SERVICE_NAME, serviceName);
                     savedSim1Service = selectItem;
-                    savedSim1ServiceName = adapterView.getItemAtPosition(i).toString();
-//                    Log.d("USD_SERVICE :2", savedSim1Service);
+                    savedSim1ServiceName = serviceName;
                     Log.d("USD_SERVICE_NAME :2", savedSim1ServiceName);
-                    switch (savedSim1ServiceName) {
-                        case "Grameen":
-                            session.setData(SIM1_SERVICE_CODE, "GP");
-                            break;
-                        case "Robi":
-                            session.setData(SIM1_SERVICE_CODE, "RB");
-                            break;
-                        case "Airtel":
-                            session.setData(SIM1_SERVICE_CODE, "AT");
-                            break;
-                        case "bLink":
-                            session.setData(SIM1_SERVICE_CODE, "BL");
-                            break;
-                        case "Taletalk":
-                            session.setData(SIM1_SERVICE_CODE, "TT");
-                            break;
-                        case "bKash-Load":
-                        case "Nagad-Load":
-                            session.setData(SIM1_SERVICE_CODE, "GP,RB,AT,BL,TT");
-                            break;
-                        case "bKash-Agent-SIM":
-                            session.setData(SIM1_SERVICE_CODE, "BK");
-                            break;
-                        case "bKash-Personal-SIM":
-                            session.setData(SIM1_SERVICE_CODE, "BKA,BKS");
-                            break;
-                        case "Roket-Agent-SIM":
-                            session.setData(SIM1_SERVICE_CODE, "RK");
-                            break;
-                        case "Roket-Personal-SIM":
-                            session.setData(SIM1_SERVICE_CODE, "RKA,RKS");
-                            break;
-                        case "Nagad-Agent-SIM":
-                            session.setData(SIM1_SERVICE_CODE, "NG");
-                            break;
-                        case "Nagad-Personal-SIM":
-                            session.setData(SIM1_SERVICE_CODE, "NGA,NGS");
-                            break;
-                    }
-                    Toast.makeText(MainActivity.this, "Sim 1 service is : " + savedSim1ServiceName, Toast.LENGTH_SHORT).show();
+                    session.setData(SIM1_SERVICE_CODE, ServiceCatalog.getCodeForService(savedSim1ServiceName));
                 }
             }
 
@@ -875,54 +790,14 @@ public class MainActivity extends AppCompatActivity {
         activityMainBinding.service2Sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                if (adapterView.getItemAtPosition(i).equals("Select one")) {
-
-                } else {
+                String serviceName = String.valueOf(adapterView.getItemAtPosition(i));
+                if (!ServiceCatalog.SELECT_ONE.equals(serviceName)) {
                     int selectItem = adapterView.getSelectedItemPosition();
                     session.setData(Session.SIM2_SERVICE, String.valueOf(selectItem));
-                    session.setData(Session.SIM2_SERVICE_NAME, adapterView.getItemAtPosition(i).toString());
+                    session.setData(Session.SIM2_SERVICE_NAME, serviceName);
                     savedSim2Service = selectItem;
-                    savedSim2ServiceName = adapterView.getItemAtPosition(i).toString();
-                    switch (savedSim2ServiceName) {
-                        case "Grameen":
-                            session.setData(SIM2_SERVICE_CODE, "GP");
-                            break;
-                        case "Robi":
-                            session.setData(SIM2_SERVICE_CODE, "RB");
-                            break;
-                        case "Airtel":
-                            session.setData(SIM2_SERVICE_CODE, "AT");
-                            break;
-                        case "bLink":
-                            session.setData(SIM2_SERVICE_CODE, "BL");
-                            break;
-                        case "Taletalk":
-                            session.setData(SIM2_SERVICE_CODE, "TT");
-                            break;
-                        case "bKash-Load":
-                        case "Nagad-Load":
-                            session.setData(SIM2_SERVICE_CODE, "GP,RB,AT,BL,TT");
-                            break;
-                        case "bKash-Agent-SIM":
-                            session.setData(SIM2_SERVICE_CODE, "BK");
-                            break;
-                        case "bKash-Personal-SIM":
-                            session.setData(SIM2_SERVICE_CODE, "BKA,BKS");
-                            break;
-                        case "Roket-Agent-SIM":
-                            session.setData(SIM2_SERVICE_CODE, "RK");
-                            break;
-                        case "Roket-Personal-SIM":
-                            session.setData(SIM2_SERVICE_CODE, "RKA,RKS");
-                            break;
-                        case "Nagad-Agent-SIM":
-                            session.setData(SIM2_SERVICE_CODE, "NG");
-                            break;
-                        case "Nagad-Personal-SIM":
-                            session.setData(SIM2_SERVICE_CODE, "NGA,NGS");
-                            break;
-                    }
-                    Toast.makeText(MainActivity.this, "Sim 2 service is : " + savedSim2ServiceName, Toast.LENGTH_SHORT).show();
+                    savedSim2ServiceName = serviceName;
+                    session.setData(SIM2_SERVICE_CODE, ServiceCatalog.getCodeForService(savedSim2ServiceName));
                 }
             }
 
@@ -1205,6 +1080,8 @@ public class MainActivity extends AppCompatActivity {
         String service = request.service;
         String sid = request.sid;
         String pcode = request.pcode;
+        // Financial request fields must be validated as-is. We normalize formatting,
+        // but we never guess, auto-correct, or swap phone and amount values.
         String phone = normalizeBdPhone(request.phone);
         String amount = normalizeAmountValue(request.amount);
         String type = request.type;

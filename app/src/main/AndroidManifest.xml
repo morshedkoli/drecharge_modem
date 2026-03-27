@@ -50,6 +50,11 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name="com.dRecharge.modem.SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <receiver
             android:name="com.dRecharge.modem.receiver.SMSBReceiver"
             android:enabled="true"
