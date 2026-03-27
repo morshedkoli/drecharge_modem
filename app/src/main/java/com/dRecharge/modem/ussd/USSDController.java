@@ -48,6 +48,7 @@ public class USSDController implements USSDInterface, USSDApi {
     private static final long USSD_STEP_DELAY_MS = 900;  // দ্রুত USSD - number/amount step (আগে 1500)
     private static final long USSD_PIN_DELAY_MS = 1400;  // দ্রুত PIN - dialog ready হওয়ার অপেক্ষা (আগে 2500)
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Object sessionLock = new Object();
     private int ussdSessionId = 0;
 
     private final USSDInterface ussdInterface;
@@ -102,12 +103,14 @@ public class USSDController implements USSDInterface, USSDApi {
      * @param callbackInvoke  a callback object from return answer
      */
     public void callUSSDInvoke(String ussdPhoneNumber, int simSlot, HashMap<String, HashSet<String>> map, CallbackInvoke callbackInvoke) {
-        this.callbackInvoke = callbackInvoke;
-        this.map = map;
+        prepareSession(map, callbackInvoke);
         if (verifyAccesibilityAccess(context)) {
             dialUp(ussdPhoneNumber, simSlot);
         } else {
-            this.callbackInvoke.over("Check your accessibility");
+            CallbackInvoke invokeCallback = consumeCallbackInvoke();
+            if (invokeCallback != null) {
+                invokeCallback.over("Check your accessibility");
+            }
         }
     }
 
@@ -121,29 +124,40 @@ public class USSDController implements USSDInterface, USSDApi {
      * @param callbackInvoke  a callback object from return answer
      */
     public void callUSSDOverlayInvoke(String ussdPhoneNumber, int simSlot, HashMap<String, HashSet<String>> map, CallbackInvoke callbackInvoke) {
-        this.callbackInvoke = callbackInvoke;
-        this.map = map;
+        prepareSession(map, callbackInvoke);
         if (verifyAccesibilityAccess(context)) {
             dialUp(ussdPhoneNumber, simSlot);
         } else {
-            this.callbackInvoke.over("Check your accessibility permission");
+            CallbackInvoke invokeCallback = consumeCallbackInvoke();
+            if (invokeCallback != null) {
+                invokeCallback.over("Check your accessibility permission");
+            }
         }
     }
 
     private void dialUp(String ussdPhoneNumber, int simSlot) {
         if (map == null || (!map.containsKey(KEY_ERROR) || !map.containsKey(KEY_LOGIN))) {
-            this.callbackInvoke.over("Bad Mapping structure");
+            CallbackInvoke invokeCallback = consumeCallbackInvoke();
+            if (invokeCallback != null) {
+                invokeCallback.over("Bad Mapping structure");
+            }
             return;
         }
         if (ussdPhoneNumber.isEmpty()) {
-            this.callbackInvoke.over("Bad ussd number");
+            CallbackInvoke invokeCallback = consumeCallbackInvoke();
+            if (invokeCallback != null) {
+                invokeCallback.over("Bad ussd number");
+            }
             return;
         }
         // Encode # for tel: URI - required for USSD codes on all Android versions
         String encodedUssd = ussdPhoneNumber.replace("#", Uri.encode("#"));
         Uri uriPhone = Uri.parse("tel:" + encodedUssd);
-        if (uriPhone != null)
-            isRunning = true;
+        if (uriPhone != null) {
+            synchronized (sessionLock) {
+                isRunning = true;
+            }
+        }
         boolean hasCallPermission = hasCallPermission();
         // Android 14+ (API 34): ACTION_CALL no longer auto-dials USSD/MMI - only default dialer can.
         // Use ACTION_DIAL so dialer opens with number pre-filled; user taps dial (Accessibility will handle).
@@ -225,15 +239,24 @@ public class USSDController implements USSDInterface, USSDApi {
     }
 
     private void scheduleTimeout() {
-        final int sessionId = ++ussdSessionId;
+        final int sessionId;
+        synchronized (sessionLock) {
+            sessionId = ussdSessionId;
+        }
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (Boolean.TRUE.equals(isRunning) && ussdSessionId == sessionId) {
-                    isRunning = false;
-                    if (callbackInvoke != null) {
-                        callbackInvoke.over("USSD timeout. Please check dialer/permissions.");
+                CallbackInvoke invokeCallback = null;
+                synchronized (sessionLock) {
+                    if (Boolean.TRUE.equals(isRunning) && ussdSessionId == sessionId) {
+                        isRunning = false;
+                        callbackMessage = null;
+                        invokeCallback = callbackInvoke;
+                        callbackInvoke = null;
                     }
+                }
+                if (invokeCallback != null) {
+                    invokeCallback.over("USSD timeout. Please check dialer/permissions.");
                 }
             }
         }, USSD_TIMEOUT_MS);
@@ -253,10 +276,19 @@ public class USSDController implements USSDInterface, USSDApi {
     }
 
     public void send(String text, CallbackMessage callbackMessage, long delayMs) {
-        this.callbackMessage = callbackMessage;
+        final int sessionId;
+        synchronized (sessionLock) {
+            sessionId = ussdSessionId;
+        }
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
+                synchronized (sessionLock) {
+                    if (!Boolean.TRUE.equals(isRunning) || ussdSessionId != sessionId) {
+                        return;
+                    }
+                    USSDController.this.callbackMessage = callbackMessage;
+                }
                 ussdInterface.sendData(text);
             }
         }, delayMs);
@@ -264,7 +296,48 @@ public class USSDController implements USSDInterface, USSDApi {
 
     @Override
     public void cancel() {
+        synchronized (sessionLock) {
+            handler.removeCallbacksAndMessages(null);
+            ussdSessionId++;
+            isRunning = false;
+            callbackInvoke = null;
+            callbackMessage = null;
+        }
         USSDService.cancel();
+    }
+
+    private void prepareSession(HashMap<String, HashSet<String>> map, CallbackInvoke callbackInvoke) {
+        synchronized (sessionLock) {
+            handler.removeCallbacksAndMessages(null);
+            ussdSessionId++;
+            this.map = map;
+            this.callbackInvoke = callbackInvoke;
+            this.callbackMessage = null;
+            this.isRunning = false;
+        }
+    }
+
+    protected CallbackInvoke consumeCallbackInvoke() {
+        synchronized (sessionLock) {
+            CallbackInvoke currentCallback = callbackInvoke;
+            callbackInvoke = null;
+            return currentCallback;
+        }
+    }
+
+    protected CallbackMessage consumeCallbackMessage() {
+        synchronized (sessionLock) {
+            CallbackMessage currentCallback = callbackMessage;
+            callbackMessage = null;
+            return currentCallback;
+        }
+    }
+
+    protected void stopRunning() {
+        synchronized (sessionLock) {
+            handler.removeCallbacksAndMessages(null);
+            isRunning = false;
+        }
     }
 
     public static boolean verifyAccesibilityAccess(Context context) {

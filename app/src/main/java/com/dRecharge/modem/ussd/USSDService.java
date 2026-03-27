@@ -30,6 +30,7 @@ public class USSDService extends AccessibilityService {
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         USSDService.event = event;
+        USSDController controller = USSDController.instance;
 
         Log.d(TAG, "onAccessibilityEvent");
 
@@ -38,7 +39,7 @@ public class USSDService extends AccessibilityService {
                 event.getEventType(), event.getClassName(), event.getPackageName(),
                 event.getEventTime(), event.getText()));
 
-        if (USSDController.instance == null || !USSDController.instance.isRunning) {
+        if (controller == null || !controller.isRunning) {
             return;
         }
         Log.d(TAG, "isRunning=true, class=" + event.getClassName() + " pkg=" + event.getPackageName());
@@ -54,18 +55,24 @@ public class USSDService extends AccessibilityService {
         if (LoginView(event) && notInputText(event)) {
             // first view or logView, do nothing, pass / FIRST MESSAGE
             clickOnButton(event, 0);
-            USSDController.instance.isRunning = false;
+            controller.stopRunning();
             String message = getEventText(event);
-            if (USSDController.instance.callbackInvoke != null && !message.isEmpty()) {
-                USSDController.instance.callbackInvoke.over(message);
+            if (!message.isEmpty()) {
+                USSDController.CallbackInvoke invokeCallback = controller.consumeCallbackInvoke();
+                if (invokeCallback != null) {
+                    invokeCallback.over(message);
+                }
             }
         } else if (problemView(event) || LoginView(event)) {
             // deal down
 
             clickOnButton(event, 1);
             String message = getEventText(event);
-            if (USSDController.instance.callbackInvoke != null && !message.isEmpty()) {
-                USSDController.instance.callbackInvoke.over(message);
+            if (!message.isEmpty()) {
+                USSDController.CallbackInvoke invokeCallback = controller.consumeCallbackInvoke();
+                if (invokeCallback != null) {
+                    invokeCallback.over(message);
+                }
             }
         } else if (isUSSDWidget(event)) {
             // ready for work
@@ -84,11 +91,14 @@ public class USSDService extends AccessibilityService {
             // bKash/Nagad/Rocket: "Enter Menu PIN to confirm" বা "Enter PIN" থাকলে Cancel ক্লিক করবেন না - input চাইছে, send() PIN পাঠাবে
             if (isPromptForInput(response)) {
                 Log.d(TAG, "prompt for input (PIN/Amount/Number) - waiting for send()");
-                if (USSDController.instance.callbackInvoke != null) {
-                    USSDController.instance.callbackInvoke.responseInvoke(response);
-                    USSDController.instance.callbackInvoke = null;
-                } else if (USSDController.instance.callbackMessage != null) {
-                    USSDController.instance.callbackMessage.responseMessage(response);
+                USSDController.CallbackInvoke invokeCallback = controller.consumeCallbackInvoke();
+                if (invokeCallback != null) {
+                    invokeCallback.responseInvoke(response);
+                } else {
+                    USSDController.CallbackMessage messageCallback = controller.consumeCallbackMessage();
+                    if (messageCallback != null) {
+                        messageCallback.responseMessage(response);
+                    }
                 }
             } else if (notInputText(event)) {
                 Log.d(TAG, "no input detected, hasSend=" + hasSendButton(event)
@@ -97,29 +107,30 @@ public class USSDService extends AccessibilityService {
                 
                 // sent 'OK' button (index 0 = OK, not Cancel - only when really last message)
                 clickOnButton(event, 0);
-                USSDController.instance.isRunning = false;
-                //USSDController.instance.callbackInvoke.over(response);
-                try {
-                    USSDController.instance.callbackInvoke.responseInvoke(response);
-                } catch (Exception e){
-
-                }
-                try{
-                    USSDController.instance.callbackMessage.responseMessage(response);
-                } catch (Exception e){
-
+                controller.stopRunning();
+                USSDController.CallbackInvoke invokeCallback = controller.consumeCallbackInvoke();
+                if (invokeCallback != null) {
+                    invokeCallback.responseInvoke(response);
+                } else {
+                    USSDController.CallbackMessage messageCallback = controller.consumeCallbackMessage();
+                    if (messageCallback != null) {
+                        messageCallback.responseMessage(response);
+                    }
                 }
                 Log.d("===USSD_RESPONSE",response);
             } else {
                 Log.d(TAG, "input detected, waiting for send()");
                 // sent option 1
-                if (USSDController.instance.callbackInvoke != null) {
-                    USSDController.instance.callbackInvoke.responseInvoke(response);
-                    USSDController.instance.callbackInvoke = null;
-                } else if (USSDController.instance.callbackMessage != null) {
-                    USSDController.instance.callbackMessage.responseMessage(response);
+                USSDController.CallbackInvoke invokeCallback = controller.consumeCallbackInvoke();
+                if (invokeCallback != null) {
+                    invokeCallback.responseInvoke(response);
                 } else {
-                    Log.d(TAG, "input detected but callbacks are null");
+                    USSDController.CallbackMessage messageCallback = controller.consumeCallbackMessage();
+                    if (messageCallback != null) {
+                        messageCallback.responseMessage(response);
+                    } else {
+                        Log.d(TAG, "input detected but callbacks are null");
+                    }
                 }
             }
         }

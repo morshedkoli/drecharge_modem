@@ -1844,11 +1844,114 @@ public class MainActivity extends AppCompatActivity {
                     ussdApi.send("2", new USSDController.CallbackMessage() {
                         @Override
                         public void responseMessage(String message) {
-
+                            continueRoketSendMoney(flexiId, phone, amount, simSlotId, simPin);
                         }
                     });
+                } else {
+                    continueRoketSendMoney(flexiId, phone, amount, simSlotId, simPin);
                 }
-                ussdApi.send("2", new USSDController.CallbackMessage() {
+            }
+
+            @Override
+            public void over(String message) {
+
+            }
+        });
+    }
+
+    private void RoketCashOut(String flexiId, String phone, String amount, int simSlotId, String simPin) {
+        ussdApi.callUSSDInvoke("*322#", simSlotId, map, new USSDController.CallbackInvoke() {
+            @Override
+            public void responseInvoke(String message) {
+                if (message.contains("Do you want to continue?")) {
+                    ussdApi.send("2", new USSDController.CallbackMessage() {
+                        @Override
+                        public void responseMessage(String message) {
+                            continueRoketCashOut(flexiId, phone, amount, simSlotId, simPin);
+                        }
+                    });
+                } else {
+                    continueRoketCashOut(flexiId, phone, amount, simSlotId, simPin);
+                }
+            }
+
+            @Override
+            public void over(String message) {
+
+            }
+        });
+    }
+
+    private void RoketCashIn(String flexiId, String phone, String amount, int simSlotId, String simPin) {
+        ussdApi.callUSSDInvoke("*322#", simSlotId, map, new USSDController.CallbackInvoke() {
+            @Override
+            public void responseInvoke(String message) {
+                if (message.contains("Do you want to continue?") || message.contains("Resume session?")) {
+                    ussdApi.send("2", new USSDController.CallbackMessage() {
+                        @Override
+                        public void responseMessage(String message) {
+                            continueRoketCashIn(flexiId, phone, amount, simSlotId, simPin);
+                        }
+                    });
+                } else {
+                    continueRoketCashIn(flexiId, phone, amount, simSlotId, simPin);
+                }
+            }
+
+            @Override
+            public void over(String message) {
+            }
+        });
+    }
+
+    private void continueRoketSendMoney(String flexiId, String phone, String amount, int simSlotId, String simPin) {
+        ussdApi.send("2", new USSDController.CallbackMessage() {
+            @Override
+            public void responseMessage(String message) {
+                ussdApi.send(phone, new USSDController.CallbackMessage() {
+                    @Override
+                    public void responseMessage(String message) {
+                        ussdApi.send(amount, new USSDController.CallbackMessage() {
+                            @Override
+                            public void responseMessage(String message) {
+                                ussdApi.send(simPin, new USSDController.CallbackMessage() {
+                                    @Override
+                                    public void responseMessage(String message) {
+                                        if (message.contains("LogOut")) {
+                                            ussdApi.send("0", new USSDController.CallbackMessage() {
+                                                @Override
+                                                public void responseMessage(String message) {
+                                                    ussdApi.cancel();
+                                                }
+                                            });
+                                        }
+                                        ussdApi.cancel();
+                                        if (simSlotId == Constant.sim1Slot) {
+                                            sim_number = session.getData(Session.SIM1_NUMBER);
+                                        }
+
+                                        if (simSlotId == Constant.sim2Slot) {
+                                            sim_number = session.getData(Session.SIM2_NUMBER);
+                                        }
+                                        InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
+                                        // রিকোয়েস্ট সম্পন্ন - পরবর্তী রিকোয়েস্ট প্রসেস করুন
+                                        // Request completed - process next request
+                                        onRequestCompleted(simSlotId);
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    private void continueRoketCashOut(String flexiId, String phone, String amount, int simSlotId, String simPin) {
+        ussdApi.send("7", new USSDController.CallbackMessage() {
+            @Override
+            public void responseMessage(String message) {
+                ussdApi.send("1", new USSDController.CallbackMessage() {
                     @Override
                     public void responseMessage(String message) {
                         ussdApi.send(phone, new USSDController.CallbackMessage() {
@@ -1877,8 +1980,6 @@ public class MainActivity extends AppCompatActivity {
                                                     sim_number = session.getData(Session.SIM2_NUMBER);
                                                 }
                                                 InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
-                                                // রিকোয়েস্ট সম্পন্ন - পরবর্তী রিকোয়েস্ট প্রসেস করুন
-                                                // Request completed - process next request
                                                 onRequestCompleted(simSlotId);
                                             }
                                         });
@@ -1889,114 +1990,38 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
             }
-
-            @Override
-            public void over(String message) {
-
-            }
         });
     }
 
-    private void RoketCashOut(String flexiId, String phone, String amount, int simSlotId, String simPin) {
-        ussdApi.callUSSDInvoke("*322#", simSlotId, map, new USSDController.CallbackInvoke() {
+    private void continueRoketCashIn(String flexiId, String phone, String amount, int simSlotId, String simPin) {
+        ussdApi.send("1", new USSDController.CallbackMessage() {
             @Override
-            public void responseInvoke(String message) {
-                if (message.contains("Do you want to continue?")) {
-                    ussdApi.send("2", new USSDController.CallbackMessage() {
-                        @Override
-                        public void responseMessage(String message) {
-
-                        }
-                    });
-                }
-                ussdApi.send("7", new USSDController.CallbackMessage() {
+            public void responseMessage(String message) {
+                ussdApi.send(phone, new USSDController.CallbackMessage() {
                     @Override
                     public void responseMessage(String message) {
-                        ussdApi.send("1", new USSDController.CallbackMessage() {
+                        ussdApi.send(amount, new USSDController.CallbackMessage() {
                             @Override
                             public void responseMessage(String message) {
-                                ussdApi.send(phone, new USSDController.CallbackMessage() {
+                                ussdApi.send(simPin, new USSDController.CallbackMessage() {
                                     @Override
                                     public void responseMessage(String message) {
-                                        ussdApi.send(amount, new USSDController.CallbackMessage() {
-                                            @Override
-                                            public void responseMessage(String message) {
-                                                ussdApi.send(simPin, new USSDController.CallbackMessage() {
-                                                    @Override
-                                                    public void responseMessage(String message) {
-                                                        if (message.contains("LogOut")) {
-                                                            ussdApi.send("0", new USSDController.CallbackMessage() {
-                                                                @Override
-                                                                public void responseMessage(String message) {
-                                                                    ussdApi.cancel();
-                                                                }
-                                                            });
-                                                        }
-                                                        ussdApi.cancel();
-                                                        if (simSlotId == Constant.sim1Slot) {
-                                                            sim_number = session.getData(Session.SIM1_NUMBER);
-                                                        }
+                                        ussdApi.cancel();
+                                        if (simSlotId == Constant.sim1Slot) {
+                                            sim_number = session.getData(Session.SIM1_NUMBER);
+                                        }
 
-                                                        if (simSlotId == Constant.sim2Slot) {
-                                                            sim_number = session.getData(Session.SIM2_NUMBER);
-                                                        }
-                                                        InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
-                                                    }
-                                                });
-                                            }
-                                        });
+                                        if (simSlotId == Constant.sim2Slot) {
+                                            sim_number = session.getData(Session.SIM2_NUMBER);
+                                        }
+                                        InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
+                                        onRequestCompleted(simSlotId);
                                     }
                                 });
                             }
                         });
                     }
                 });
-            }
-
-            @Override
-            public void over(String message) {
-
-            }
-        });
-    }
-
-    private void RoketCashIn(String flexiId, String phone, String amount, int simSlotId, String simPin) {
-        ussdApi.callUSSDInvoke("*322#", simSlotId, map, new USSDController.CallbackInvoke() {
-            @Override
-            public void responseInvoke(String message) {
-                ussdApi.send("1", new USSDController.CallbackMessage() {
-                    @Override
-                    public void responseMessage(String message) {
-                        ussdApi.send(phone, new USSDController.CallbackMessage() {
-                            @Override
-                            public void responseMessage(String message) {
-                                ussdApi.send(amount, new USSDController.CallbackMessage() {
-                                    @Override
-                                    public void responseMessage(String message) {
-                                        ussdApi.send(simPin, new USSDController.CallbackMessage() {
-                                            @Override
-                                            public void responseMessage(String message) {
-                                                ussdApi.cancel();
-                                                if (simSlotId == Constant.sim1Slot) {
-                                                    sim_number = session.getData(Session.SIM1_NUMBER);
-                                                }
-
-                                                if (simSlotId == Constant.sim2Slot) {
-                                                    sim_number = session.getData(Session.SIM2_NUMBER);
-                                                }
-                                                InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-                        });
-                    }
-                });
-            }
-
-            @Override
-            public void over(String message) {
             }
         });
     }
