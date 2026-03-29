@@ -281,8 +281,6 @@ public class MainActivity extends AppCompatActivity {
         activityMainBinding.status1Sw.setChecked(session.getBooleanData(Session.SIM1_ENABLED));
         activityMainBinding.status2Sw.setChecked(session.getBooleanData(Session.SIM2_ENABLED));
         isSyncingSwitch = false;
-        activityMainBinding.checkBal1Btn.setEnabled(activityMainBinding.status1Sw.isChecked());
-        activityMainBinding.checkBal2Btn.setEnabled(activityMainBinding.status2Sw.isChecked());
         refreshPowerButton();
     }
 
@@ -841,7 +839,6 @@ public class MainActivity extends AppCompatActivity {
                     List<ServiceConfig> sim1Cfgs = session.getActiveServicesForSim(1);
                     boolean hasConfig = !sim1Cfgs.isEmpty() || (savedSim1Pin != null && !savedSim1Pin.isEmpty() && savedSim1Service != 0);
                     if (hasConfig) {
-                        activityMainBinding.checkBal1Btn.setEnabled(true);
                         callGetNewPendingAfterBalanceCheck(sim1Id);
                     } else {
                         Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
@@ -849,7 +846,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                 } else {
                     isWaitingForBalanceCheckSim1 = false;
-                    activityMainBinding.checkBal1Btn.setEnabled(false);
                 }
                 refreshPowerButton();
             }
@@ -866,7 +862,6 @@ public class MainActivity extends AppCompatActivity {
                     List<ServiceConfig> sim2Cfgs = session.getActiveServicesForSim(2);
                     boolean hasConfig2 = !sim2Cfgs.isEmpty() || (savedSim2Pin != null && !savedSim2Pin.isEmpty() && savedSim2Service != 0);
                     if (hasConfig2) {
-                        activityMainBinding.checkBal2Btn.setEnabled(true);
                         callGetNewPendingAfterBalanceCheck(sim2Id);
                     } else {
                         Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
@@ -874,55 +869,11 @@ public class MainActivity extends AppCompatActivity {
                     }
                 } else {
                     isWaitingForBalanceCheckSim2 = false;
-                    activityMainBinding.checkBal2Btn.setEnabled(false);
                 }
                 refreshPowerButton();
             }
         });
 
-        activityMainBinding.checkBal1Btn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (!activityMainBinding.status1Sw.isChecked()) return;
-                List<ServiceConfig> sim1Cfgs = session.getActiveServicesForSim(1);
-                String balServiceName = !sim1Cfgs.isEmpty() ? sim1Cfgs.get(0).name : savedSim1ServiceName;
-                String balPin = !sim1Cfgs.isEmpty() ? sim1Cfgs.get(0).pin : savedSim1Pin;
-                boolean hasConfig = !sim1Cfgs.isEmpty() || (savedSim1Pin != null && !savedSim1Pin.isEmpty() && savedSim1Service != 0);
-                if (hasConfig) {
-                    try {
-                        isWaitingForBalanceCheckSim1 = true;
-                        queryForSetSimWithBalance(balServiceName, sim1Num, balPin, sim1Id);
-                    } catch (Exception e) {
-                        System.out.println("======BL_EXP: " + e);
-                        isWaitingForBalanceCheckSim1 = false;
-                    }
-                } else {
-                    Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
-
-        activityMainBinding.checkBal2Btn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (!activityMainBinding.status2Sw.isChecked()) return;
-                List<ServiceConfig> sim2Cfgs = session.getActiveServicesForSim(2);
-                String balServiceName2 = !sim2Cfgs.isEmpty() ? sim2Cfgs.get(0).name : savedSim2ServiceName;
-                String balPin2 = !sim2Cfgs.isEmpty() ? sim2Cfgs.get(0).pin : savedSim2Pin;
-                boolean hasConfig2 = !sim2Cfgs.isEmpty() || (savedSim2Pin != null && !savedSim2Pin.isEmpty() && savedSim2Service != 0);
-                if (hasConfig2) {
-                    try {
-                        isWaitingForBalanceCheckSim2 = true;
-                        queryForSetSimWithBalance(balServiceName2, sim2Num, balPin2, sim2Id);
-                    } catch (Exception e) {
-                        System.out.println("======BL_EXP: " + e);
-                        isWaitingForBalanceCheckSim2 = false;
-                    }
-                } else {
-                    Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
     }
 
     private void refreshPowerButton() {
@@ -1260,43 +1211,19 @@ public class MainActivity extends AppCompatActivity {
         Queue<RequestData> currentSimQueue = (simSlotId == sim1Id) ? requestQueueSim1 : requestQueueSim2;
         boolean hasMoreRequestsFromSameSim = !currentSimQueue.isEmpty();
 
-        if (hasMoreRequestsFromSameSim) {
-            // একই SIM এর আরো রিকোয়েস্ট আছে - গ্লোবাল লক রিসেট করুন (30 সেকেন্ড অপেক্ষার আগে)
-            // More requests from same SIM - reset global lock (before 30 second wait)
-            isAnySimProcessing = false;
+        // Reset global lock
+        isAnySimProcessing = false;
 
-            // 30 সেকেন্ড অপেক্ষা করে পরবর্তী রিকোয়েস্ট প্রসেস করুন
-            // Wait 30 seconds and then process next request
+        // If there are more queued requests for this SIM, process the next one after the delay
+        if (hasMoreRequestsFromSameSim) {
             handler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    // processNextInQueue method নিজেই সব check করবে, তাই সরাসরি call করুন
-                    // processNextInQueue method will check everything itself, so call it directly
                     processNextInQueue(simSlotId);
                 }
-            }, simProcessingDelay); // 30 সেকেন্ড অপেক্ষা / Wait 30 seconds
-        } else {
-            // একই SIM এর আরো রিকোয়েস্ট নেই - গ্লোবাল লক রিসেট করুন
-            // No more requests from same SIM - reset global lock
-            isAnySimProcessing = false;
-
-            // Interval time (default 30 সেকেন্ড) অপেক্ষা করে পরবর্তী pending number fetch করুন
-            // Wait interval time (default 30 seconds) and then fetch next pending number
-            handler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    if (simSlotId == sim1Id) {
-                        if (activityMainBinding.status1Sw.isChecked()) {
-                            fetchPendingForSim(1);
-                        }
-                    } else if (simSlotId == sim2Id) {
-                        if (activityMainBinding.status2Sw.isChecked()) {
-                            fetchPendingForSim(2);
-                        }
-                    }
-                }
-            }, getTimerTime());
+            }, simProcessingDelay);
         }
+        // No balance check or server fetch here — the periodic timer handles all polling
     }
 
     private void scheduleSafetyTimeout(final int simSlotId) {

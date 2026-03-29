@@ -50,28 +50,25 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
-                <EditText
-                    android:id="@+id/domainEt"
+                <TextView
+                    android:id="@+id/domainValueTv"
                     android:layout_width="0dp"
-                    android:layout_height="46dp"
+                    android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:hint="e.g. https://example.com"
-                    android:inputType="textUri"
-                    android:paddingStart="14dp"
-                    android:paddingEnd="14dp"
+                    android:text="Not configured"
                     android:textSize="13sp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_hint"
-                    android:background="@drawable/bg_rounded_input"
-                    android:layout_marginEnd="10dp"/>
+                    android:textColor="@color/text_hint"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:layout_marginEnd="12dp"/>
 
                 <Button
-                    android:id="@+id/domainSaveBtn"
+                    android:id="@+id/domainEditBtn"
                     android:layout_width="wrap_content"
-                    android:layout_height="46dp"
-                    android:text="Save"
+                    android:layout_height="40dp"
+                    android:text="Edit"
                     android:textColor="#FFFFFF"
-                    android:textSize="14sp"
+                    android:textSize="13sp"
                     android:textStyle="bold"
                     android:background="@drawable/bg_btn_confirm"
                     android:paddingStart="20dp"

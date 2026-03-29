@@ -59,15 +59,50 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setupDomainSection() {
-        EditText domainEt = findViewById(R.id.domainEt);
-        Button domainSaveBtn = findViewById(R.id.domainSaveBtn);
+        TextView domainValueTv = findViewById(R.id.domainValueTv);
+        Button domainEditBtn = findViewById(R.id.domainEditBtn);
+
+        refreshDomainDisplay(domainValueTv);
+
+        domainEditBtn.setOnClickListener(v -> showDomainEditDialog(domainValueTv));
+    }
+
+    private void refreshDomainDisplay(TextView domainValueTv) {
+        String current = session.getData(Session.API_DOMAIN_LINK);
+        if (current != null && !current.isEmpty()) {
+            domainValueTv.setText(current);
+            domainValueTv.setTextColor(getResources().getColor(R.color.text_primary, getTheme()));
+        } else {
+            domainValueTv.setText("Not configured");
+            domainValueTv.setTextColor(getResources().getColor(R.color.text_hint, getTheme()));
+        }
+    }
+
+    private void showDomainEditDialog(TextView domainValueTv) {
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_domain_edit, null);
+
+        EditText domainEt = dialogView.findViewById(R.id.dialogDomainEt);
+        Button cancelBtn = dialogView.findViewById(R.id.dialogDomainCancelBtn);
+        Button saveBtn = dialogView.findViewById(R.id.dialogDomainSaveBtn);
 
         String current = session.getData(Session.API_DOMAIN_LINK);
         if (current != null && !current.isEmpty()) {
             domainEt.setText(current);
+            domainEt.setSelection(current.length());
         }
 
-        domainSaveBtn.setOnClickListener(v -> {
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(dialogView)
+                .setCancelable(true)
+                .create();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+
+        cancelBtn.setOnClickListener(v -> dialog.dismiss());
+
+        saveBtn.setOnClickListener(v -> {
             String input = domainEt.getText().toString().trim();
             if (input.isEmpty()) {
                 Toast.makeText(this, "Please enter a domain", Toast.LENGTH_SHORT).show();
@@ -80,9 +115,12 @@ public class SettingsActivity extends AppCompatActivity {
             }
             session.setData(Session.API_DOMAIN_LINK, domain);
             session.setBooleanData(Session.IS_DOMAIN_VALIED, true);
-            domainEt.setText(domain);
+            refreshDomainDisplay(domainValueTv);
+            dialog.dismiss();
             Toast.makeText(this, "Domain saved", Toast.LENGTH_SHORT).show();
         });
+
+        dialog.show();
     }
 
     @Override
