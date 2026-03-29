@@ -1,6 +1,7 @@
 package com.dRecharge.modem;
 
 import android.Manifest;
+import android.app.AppOpsManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -9,6 +10,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.Toast;
@@ -26,8 +28,13 @@ public class PermissionActivity extends AppCompatActivity {
 
     private static final int RC_PERMISSIONS = 201;
 
-    private ImageView step1Icon, step2Icon, step3Icon, step4Icon;
-    private Button step1Btn, step2Btn, step3Btn, step4Btn, continueBtn;
+    private ImageView step1Icon, stepRestrictedIcon, step2Icon, step3Icon, step4Icon;
+    private Button step1Btn, stepRestrictedBtn, step2Btn, step3Btn, step4Btn, continueBtn;
+    private View stepRestrictedCard;
+
+    // Tracks whether user clicked the unlock button and went to Settings
+    private boolean restrictedUnlockPending = false;
+    private boolean restrictedSettingsGranted = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,17 +49,33 @@ public class PermissionActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_permission_setup);
 
-        step1Icon = findViewById(R.id.step1Icon);
-        step1Btn  = findViewById(R.id.step1Btn);
-        step2Icon = findViewById(R.id.step2Icon);
-        step2Btn  = findViewById(R.id.step2Btn);
-        step3Icon = findViewById(R.id.step3Icon);
-        step3Btn  = findViewById(R.id.step3Btn);
-        step4Icon = findViewById(R.id.step4Icon);
-        step4Btn  = findViewById(R.id.step4Btn);
-        continueBtn = findViewById(R.id.continueBtn);
+        step1Icon         = findViewById(R.id.step1Icon);
+        step1Btn          = findViewById(R.id.step1Btn);
+        stepRestrictedCard = findViewById(R.id.stepRestrictedCard);
+        stepRestrictedIcon = findViewById(R.id.stepRestrictedIcon);
+        stepRestrictedBtn  = findViewById(R.id.stepRestrictedBtn);
+        step2Icon         = findViewById(R.id.step2Icon);
+        step2Btn          = findViewById(R.id.step2Btn);
+        step3Icon         = findViewById(R.id.step3Icon);
+        step3Btn          = findViewById(R.id.step3Btn);
+        step4Icon         = findViewById(R.id.step4Icon);
+        step4Btn          = findViewById(R.id.step4Btn);
+        continueBtn       = findViewById(R.id.continueBtn);
+
+        // Hide restricted settings step on Android < 13 (not applicable)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            stepRestrictedCard.setVisibility(View.GONE);
+        }
 
         step1Btn.setOnClickListener(v -> requestRuntimePermissions());
+
+        stepRestrictedBtn.setOnClickListener(v -> {
+            restrictedUnlockPending = true;
+            Toast.makeText(this,
+                "Find \"dRecharge\" → tap ⋮ (top-right) → \"Allow restricted settings\"",
+                Toast.LENGTH_LONG).show();
+            startActivity(new Intent(Settings.ACTION_MANAGE_ALL_APPLICATIONS_SETTINGS));
+        });
 
         step2Btn.setOnClickListener(v -> {
             Toast.makeText(this,
@@ -89,22 +112,30 @@ public class PermissionActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         if (continueBtn != null) {
+            if (restrictedUnlockPending) {
+                restrictedUnlockPending = false;
+                restrictedSettingsGranted = true;
+            }
             updateUI();
         }
     }
 
     private void updateUI() {
         boolean runtime      = hasRuntimePermissions();
+        boolean restricted   = isRestrictedSettingsUnlocked();
         boolean accessibility = isAccessibilityEnabled();
         boolean overlay      = hasOverlayPermission();
         boolean battery      = isBatteryOptimizationIgnored();
 
         applyStepState(step1Icon, step1Btn, runtime);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            applyStepState(stepRestrictedIcon, stepRestrictedBtn, restricted);
+        }
         applyStepState(step2Icon, step2Btn, accessibility);
         applyStepState(step3Icon, step3Btn, overlay);
         applyStepState(step4Icon, step4Btn, battery);
 
-        boolean critical = runtime && accessibility;
+        boolean critical = criticalPermissionsGranted();
         continueBtn.setEnabled(critical);
         continueBtn.setAlpha(critical ? 1.0f : 0.45f);
     }
@@ -205,12 +236,31 @@ public class PermissionActivity extends AppCompatActivity {
         return true;
     }
 
+    private boolean isRestrictedSettingsUnlocked() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Try the AppOps check first (works on stock Android)
+            try {
+                AppOpsManager appOps = (AppOpsManager) getSystemService(APP_OPS_SERVICE);
+                int mode = appOps.checkOpNoThrow(
+                        "android:access_restricted_settings",
+                        android.os.Process.myUid(), getPackageName());
+                if (mode == AppOpsManager.MODE_ALLOWED) return true;
+            } catch (Exception ignored) {}
+            // Fallback: user clicked the button and returned from Settings
+            return restrictedSettingsGranted;
+        }
+        return true; // Not applicable below Android 13
+    }
+
     private boolean criticalPermissionsGranted() {
-        return hasRuntimePermissions() && isAccessibilityEnabled();
+        return hasRuntimePermissions()
+                && isRestrictedSettingsUnlocked()
+                && isAccessibilityEnabled();
     }
 
     private boolean allSetupComplete() {
         return hasRuntimePermissions()
+            && isRestrictedSettingsUnlocked()
             && isAccessibilityEnabled()
             && hasOverlayPermission()
             && isBatteryOptimizationIgnored();

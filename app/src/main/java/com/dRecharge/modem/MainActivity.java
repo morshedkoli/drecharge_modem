@@ -334,6 +334,15 @@ public class MainActivity extends AppCompatActivity {
                     != PackageManager.PERMISSION_GRANTED) {
                 return false;
             }
+            // Check restricted settings unlocked (required before accessibility on API 33+)
+            try {
+                android.app.AppOpsManager appOps =
+                    (android.app.AppOpsManager) getSystemService(APP_OPS_SERVICE);
+                int mode = appOps.checkOpNoThrow(
+                        "android:access_restricted_settings",
+                        android.os.Process.myUid(), getPackageName());
+                if (mode != android.app.AppOpsManager.MODE_ALLOWED) return false;
+            } catch (Exception ignored) {}
         }
         // Check accessibility service
         return isAccessServiceEnabled(getApplicationContext(), USSDService.class);
