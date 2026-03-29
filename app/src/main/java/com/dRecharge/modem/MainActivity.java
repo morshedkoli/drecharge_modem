@@ -42,6 +42,7 @@ import com.dRecharge.modem.helper.Session;
 import com.dRecharge.modem.receiver.SMSBReceiver;
 import com.dRecharge.modem.server.ModemServerRepository;
 import com.dRecharge.modem.server.ServerConfig;
+import com.dRecharge.modem.service.KeepAliveService;
 import com.dRecharge.modem.service.ServiceRequest;
 import com.dRecharge.modem.ussd.USSDApi;
 import com.dRecharge.modem.ussd.USSDController;
@@ -142,6 +143,22 @@ public class MainActivity extends AppCompatActivity {
 
     int timeInterval = 30000; // ডিফল্ট: 30000 মিলিসেকেন্ড = 30 সেকেন্ড (অন্য কাজের জন্য ব্যবহৃত)
 
+    // ── Countdown ──
+    private final android.os.Handler countdownHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private long nextFetchAtMs = 0;
+    private final Runnable countdownRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (activityMainBinding != null && nextFetchAtMs > 0) {
+                long remainMs = Math.max(0, nextFetchAtMs - System.currentTimeMillis());
+                int secs = (int) (remainMs / 1000);
+                String display = String.format(java.util.Locale.US, "Next: %02d:%02d", secs / 60, secs % 60);
+                activityMainBinding.countdownTv.setText(display);
+            }
+            countdownHandler.postDelayed(this, 500);
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -165,6 +182,9 @@ public class MainActivity extends AppCompatActivity {
             finish();
             return;
         }
+
+        startKeepAliveService();
+        loadLogo();
 
         getsSimServiceInfo();
         init();
@@ -346,6 +366,41 @@ public class MainActivity extends AppCompatActivity {
         return isAccessServiceEnabled(getApplicationContext(), USSDService.class);
     }
 
+    private static final String LOGO_URL = "https://drecharge.com/drm.png";
+
+    private void loadLogo() {
+        android.os.Handler uiHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+        new Thread(() -> {
+            try {
+                java.net.HttpURLConnection conn =
+                        (java.net.HttpURLConnection) new java.net.URL(LOGO_URL).openConnection();
+                conn.setDoInput(true);
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.connect();
+                java.io.InputStream stream = conn.getInputStream();
+                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(stream);
+                stream.close();
+                if (bmp != null) {
+                    uiHandler.post(() -> {
+                        if (!isDestroyed()) {
+                            activityMainBinding.mainLogoImg.setImageBitmap(bmp);
+                        }
+                    });
+                }
+            } catch (Exception ignored) {}
+        }).start();
+    }
+
+    private void startKeepAliveService() {
+        Intent intent = new Intent(this, KeepAliveService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent);
+        } else {
+            startService(intent);
+        }
+    }
+
     public boolean isAccessServiceEnabled(Context context, Class accessibilityServiceClass) {
         String prefString = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
 
@@ -475,6 +530,9 @@ public class MainActivity extends AppCompatActivity {
                 Log.d("USD_TIMER","timer init");
                 simOneExe = new Timer();
                 simOneExe.schedule(simOneSchedule(), 1000, getTimerTime());
+                nextFetchAtMs = System.currentTimeMillis() + 1000;
+                countdownHandler.removeCallbacks(countdownRunnable);
+                countdownHandler.post(countdownRunnable);
             } else {
                 Log.d("USD_TIMER","SIM_DATA_NOT_FOUND");
             }
@@ -528,6 +586,7 @@ public class MainActivity extends AppCompatActivity {
                 handler.post(simOneRunable = new Runnable() {
                     @Override
                     public void run() {
+                        nextFetchAtMs = System.currentTimeMillis() + getTimerTime();
                         Log.d("USD_TIMER","timer is running");
                         List<ServiceConfig> cfgs = session.getActiveServicesForSim(1);
                         if (!cfgs.isEmpty()) {
@@ -551,6 +610,7 @@ public class MainActivity extends AppCompatActivity {
                 handler.post(simTwoRunable = new Runnable() {
                     @Override
                     public void run() {
+                        nextFetchAtMs = System.currentTimeMillis() + getTimerTime();
                         List<ServiceConfig> cfgs = session.getActiveServicesForSim(2);
                         if (!cfgs.isEmpty()) {
                             for (ServiceConfig cfg : cfgs) {
@@ -612,7 +672,7 @@ public class MainActivity extends AppCompatActivity {
     public void updateResultTv(final int slot, final String message) {
         MainActivity.this.runOnUiThread(new Runnable() {
             public void run() {
-                SimpleDateFormat sdf = new SimpleDateFormat("hh:mm a", Locale.getDefault());
+                SimpleDateFormat sdf = new SimpleDateFormat("hh:mm:ss a", Locale.getDefault());
                 String currentDateandTime = sdf.format(new Date());
                 String newMessage = currentDateandTime + " " + message + "\n";
                 if (slot == sim1Id) {
@@ -1107,6 +1167,29 @@ public class MainActivity extends AppCompatActivity {
 
         System.out.println("====PROCESS_REQ: service=" + service + " phone=" + phone + " amount=" + amount + " pcode=" + pcode);
 
+        // Load per-service config — USSD dial templates may be customized by the user
+        ServiceConfig svcCfg = session.getServiceConfig(service);
+
+        // Honour the service's schedule: if the service is currently in its disabled window,
+        // skip the request so it is not processed outside the configured time range.
+        if (!Session.isScheduledActiveNow(svcCfg)) {
+            updateResultTv(simSlotId, "Skipped [" + service + "] — outside scheduled hours");
+            onRequestCompleted(simSlotId);
+            return;
+        }
+
+        // For single-step telecom services, use the custom template if one is configured.
+        // isPowerLoad bypasses this so packageLoadSent logic stays intact.
+        boolean isMobileBanking = service.contains("bKash") || service.contains("Roket") || service.contains("Nagad");
+        if (!isMobileBanking && !isPowerLoad) {
+            String tmpl = "0".equals(type) && !svcCfg.dialCode0.isEmpty()
+                          ? svcCfg.dialCode0 : svcCfg.dialCode1;
+            if (!tmpl.isEmpty()) {
+                singleStepUssd(applyDialTemplate(tmpl, phone, amount, simPin), sid, simSlotId);
+                return;
+            }
+        }
+
         // সেবা অনুযায়ী প্রসেস করুন
         // Process according to service
         switch (service) {
@@ -1143,44 +1226,52 @@ public class MainActivity extends AppCompatActivity {
             case "Taletalk":
                 TaletalkLoadSend(sid, pcode, phone, amount, type, simSlotId, simPin);
                 break;
-            case "bKash-Personal-SIM":
-                if (pcode.equals("BKS"))
-                    bKashSendMoney(sid, phone, amount, simSlotId, simPin);
-                if (pcode.equals("BKA"))
-                    bKashCashOut(sid, phone, amount, simSlotId, simPin);
+            case "bKash-Personal-SIM": {
+                String ic = svcCfg.dialCode1.isEmpty() ? "*247#" : svcCfg.dialCode1;
+                if (pcode.equals("BKS")) bKashSendMoney(sid, phone, amount, simSlotId, simPin, ic);
+                if (pcode.equals("BKA")) bKashCashOut(sid, phone, amount, simSlotId, simPin, ic);
                 break;
-            case "bKash-Agent-SIM":
+            }
+            case "bKash-Agent-SIM": {
+                String ic = svcCfg.dialCode1.isEmpty() ? "*247#" : svcCfg.dialCode1;
                 if (pcode.equals("BK")) {
                     System.out.println("====BK_CASHIN: phone=" + phone + " amount=" + amount + " (before call)");
-                    bKashCashIn(sid, phone, amount, simSlotId, simPin);
+                    bKashCashIn(sid, phone, amount, simSlotId, simPin, ic);
                 }
                 break;
-            case "Roket-Personal-SIM":
-                if (pcode.equals("RKS"))
-                    RoketSendMoney(sid, phone, amount, simSlotId, simPin);
-                if (pcode.equals("RKA"))
-                    RoketCashOut(sid, phone, amount, simSlotId, simPin);
+            }
+            case "Roket-Personal-SIM": {
+                String ic = svcCfg.dialCode1.isEmpty() ? "*322#" : svcCfg.dialCode1;
+                if (pcode.equals("RKS")) RoketSendMoney(sid, phone, amount, simSlotId, simPin, ic);
+                if (pcode.equals("RKA")) RoketCashOut(sid, phone, amount, simSlotId, simPin, ic);
                 break;
-            case "Roket-Agent-SIM":
-                if (pcode.equals("RK"))
-                    RoketCashIn(sid, phone, amount, simSlotId, simPin);
+            }
+            case "Roket-Agent-SIM": {
+                String ic = svcCfg.dialCode1.isEmpty() ? "*322#" : svcCfg.dialCode1;
+                if (pcode.equals("RK")) RoketCashIn(sid, phone, amount, simSlotId, simPin, ic);
                 break;
-            case "Nagad-Personal-SIM":
-                if (pcode.equals("NGA"))
-                    NagadCashOut(sid, phone, amount, simSlotId, simPin);
-                if (pcode.equals("NGS"))
-                    NagadSendMoney(sid, phone, amount, simSlotId, simPin);
+            }
+            case "Nagad-Personal-SIM": {
+                String ic = svcCfg.dialCode1.isEmpty() ? "*167#" : svcCfg.dialCode1;
+                if (pcode.equals("NGA")) NagadCashOut(sid, phone, amount, simSlotId, simPin, ic);
+                if (pcode.equals("NGS")) NagadSendMoney(sid, phone, amount, simSlotId, simPin, ic);
                 break;
-            case "Nagad-Agent-SIM":
-                if (pcode.equals("NG"))
-                    NagadCashIn(sid, phone, amount, simSlotId, simPin);
+            }
+            case "Nagad-Agent-SIM": {
+                String ic = svcCfg.dialCode1.isEmpty() ? "*167#" : svcCfg.dialCode1;
+                if (pcode.equals("NG")) NagadCashIn(sid, phone, amount, simSlotId, simPin, ic);
                 break;
-            case "bKash-Load":
-                bKashLoad(sid, pcode, phone, amount, simSlotId, simPin);
+            }
+            case "bKash-Load": {
+                String ic = svcCfg.dialCode1.isEmpty() ? "*247#" : svcCfg.dialCode1;
+                bKashLoad(sid, pcode, phone, amount, simSlotId, simPin, ic);
                 break;
-            case "Nagad-Load":
-                NagadLoad(sid, pcode, phone, amount, simSlotId, simPin);
+            }
+            case "Nagad-Load": {
+                String ic = svcCfg.dialCode1.isEmpty() ? "*167#" : svcCfg.dialCode1;
+                NagadLoad(sid, pcode, phone, amount, simSlotId, simPin, ic);
                 break;
+            }
             default:
                 // যদি কোনো সেবা মিলে না, প্রসেসিং ফ্ল্যাগ রিসেট করুন এবং পরবর্তী রিকোয়েস্ট প্রসেস করুন
                 // If no service matches, reset processing flag and process next request
@@ -1226,6 +1317,35 @@ public class MainActivity extends AppCompatActivity {
         // No balance check or server fetch here — the periodic timer handles all polling
     }
 
+    /** Replaces {PHONE}, {AMOUNT}, {PIN} placeholders in a USSD dial template. */
+    private String applyDialTemplate(String template, String phone, String amount, String pin) {
+        return template
+                .replace("{PHONE}", phone)
+                .replace("{AMOUNT}", amount)
+                .replace("{PIN}", pin);
+    }
+
+    /** Dials a single-step USSD code, posts the response, and completes the request. */
+    private void singleStepUssd(String dialCode, String sid, int simSlotId) {
+        if (simSlotId == sim1Id) sim_number = session.getData(Session.SIM1_NUMBER);
+        else sim_number = session.getData(Session.SIM2_NUMBER);
+        final String finalSimNum = sim_number;
+        ussdApi.callUSSDInvoke(dialCode, simSlotId, map, new USSDController.CallbackInvoke() {
+            @Override
+            public void responseInvoke(String message) {
+                ussdApi.cancel();
+                InsertNewPopUpMessage(
+                        message.replaceAll(System.lineSeparator(), " "), sid, "FlashMessage", finalSimNum, simSlotId);
+                onRequestCompleted(simSlotId);
+            }
+            @Override
+            public void over(String message) {
+                Log.e("USSD_ERROR", "singleStepUssd over: " + message);
+                onRequestCompleted(simSlotId);
+            }
+        });
+    }
+
     private void scheduleSafetyTimeout(final int simSlotId) {
         cancelSafetyTimeout(simSlotId);
         Runnable r = new Runnable() {
@@ -1252,6 +1372,7 @@ public class MainActivity extends AppCompatActivity {
 
     /** Fetches pending requests for all active services on the given SIM slot (1 or 2). */
     private void fetchPendingForSim(int simSlot) {
+        updateResultTv(simSlot == 1 ? sim1Id : sim2Id, "Searching...");
         if (simSlot == 1) {
             List<ServiceConfig> cfgs = session.getActiveServicesForSim(1);
             if (!cfgs.isEmpty()) {
@@ -1622,9 +1743,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void bKashSendMoney(String flexiId, String phone, String amount, int simSlotId, String simPin) {
+    private void bKashSendMoney(String flexiId, String phone, String amount, int simSlotId, String simPin, String initialCode) {
 
-        ussdApi.callUSSDInvoke("*247#", simSlotId, map, new USSDController.CallbackInvoke() {
+        ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
                 ussdApi.send("1", new USSDController.CallbackMessage() {
@@ -1673,8 +1794,8 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void bKashCashOut(String flexiId, String phone, String amount, int simSlotId, String simPin) {
-        ussdApi.callUSSDInvoke("*247#", simSlotId, map, new USSDController.CallbackInvoke() {
+    private void bKashCashOut(String flexiId, String phone, String amount, int simSlotId, String simPin, String initialCode) {
+        ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
                 ussdApi.send("5", new USSDController.CallbackMessage() {
@@ -1725,11 +1846,11 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void bKashCashIn(String flexiId, String phone, String amount, int simSlotId, String simPin) {
+    private void bKashCashIn(String flexiId, String phone, String amount, int simSlotId, String simPin, String initialCode) {
         // phone = actual mobile number, amount = actual taka value (normalised by processRequest)
         // Flow: *247# -> 1 (Cash In) -> phone (number) -> amount (taka) -> PIN
-        System.out.println("====BK_CASHIN_USSD: *247# -> 1 -> number=" + phone + " -> taka=" + amount + " -> PIN=" + simPin);
-        ussdApi.callUSSDInvoke("*247#", simSlotId, map, new USSDController.CallbackInvoke() {
+        System.out.println("====BK_CASHIN_USSD: " + initialCode + " -> 1 -> number=" + phone + " -> taka=" + amount + " -> PIN=" + simPin);
+        ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
                 System.out.println("====BK_STEP1: dial *247# response=" + message);
@@ -1835,9 +1956,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void RoketSendMoney(String flexiId, String phone, String amount, int simSlotId, String simPin) {
+    private void RoketSendMoney(String flexiId, String phone, String amount, int simSlotId, String simPin, String initialCode) {
 
-        ussdApi.callUSSDInvoke("*322#", simSlotId, map, new USSDController.CallbackInvoke() {
+        ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
                 if (message.contains("Do you want to continue?")) {
@@ -1859,8 +1980,8 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void RoketCashOut(String flexiId, String phone, String amount, int simSlotId, String simPin) {
-        ussdApi.callUSSDInvoke("*322#", simSlotId, map, new USSDController.CallbackInvoke() {
+    private void RoketCashOut(String flexiId, String phone, String amount, int simSlotId, String simPin, String initialCode) {
+        ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
                 if (message.contains("Do you want to continue?")) {
@@ -1882,8 +2003,8 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void RoketCashIn(String flexiId, String phone, String amount, int simSlotId, String simPin) {
-        ussdApi.callUSSDInvoke("*322#", simSlotId, map, new USSDController.CallbackInvoke() {
+    private void RoketCashIn(String flexiId, String phone, String amount, int simSlotId, String simPin, String initialCode) {
+        ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
                 if (message.contains("Do you want to continue?") || message.contains("Resume session?")) {
@@ -2070,8 +2191,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void NagadSendMoney(String flexiId, String phone, String amount, int simSlotId, String simPin) {
-        ussdApi.callUSSDInvoke("*167#", simSlotId, map, new USSDController.CallbackInvoke() {
+    private void NagadSendMoney(String flexiId, String phone, String amount, int simSlotId, String simPin, String initialCode) {
+        ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
                 if (message.contains("Do you want to continue?")) {
@@ -2163,8 +2284,8 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void NagadCashOut(String flexiId, String phone, String amount, int simSlotId, String simPin) {
-        ussdApi.callUSSDInvoke("*167#", simSlotId, map, new USSDController.CallbackInvoke() {
+    private void NagadCashOut(String flexiId, String phone, String amount, int simSlotId, String simPin, String initialCode) {
+        ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
                 if (message.contains("Do you want to continue?")) {
@@ -2243,8 +2364,8 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void NagadCashIn(String flexiId, String phone, String amount, int simSlotId, String simPin) {
-        ussdApi.callUSSDInvoke("*167#", simSlotId, map, new USSDController.CallbackInvoke() {
+    private void NagadCashIn(String flexiId, String phone, String amount, int simSlotId, String simPin, String initialCode) {
+        ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
                 if (message.contains("Do you want to continue?")) {
@@ -2325,7 +2446,7 @@ public class MainActivity extends AppCompatActivity {
     //endregion Nagad
 
     //region bKashLoad
-    private void bKashLoad(String flexiId, String pccode, String phone, String amount, int simSlotId, String simPin) {
+    private void bKashLoad(String flexiId, String pccode, String phone, String amount, int simSlotId, String simPin, String initialCode) {
         dialCodeLoad = null;
         switch (pccode) {
             case "GP":
@@ -2354,7 +2475,7 @@ public class MainActivity extends AppCompatActivity {
             dialCodeType = "1";
         }
         if (dialCodeLoad != null) {
-            ussdApi.callUSSDInvoke("*247#", simSlotId, map, new USSDController.CallbackInvoke() {
+            ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
                 @Override
                 public void responseInvoke(String message) {
                     ussdApi.send("3", new USSDController.CallbackMessage() {
@@ -2414,7 +2535,7 @@ public class MainActivity extends AppCompatActivity {
     //endregion bKashLoad
 
     // region NagadLoad
-    private void NagadLoad(String flexiId, String pccode, String phone, String amount, int simSlotId, String simPin) {
+    private void NagadLoad(String flexiId, String pccode, String phone, String amount, int simSlotId, String simPin, String initialCode) {
         dialCodeLoad = null;
         switch (pccode) {
             case "GP":
@@ -2443,7 +2564,7 @@ public class MainActivity extends AppCompatActivity {
             dialCodeType = "1";
         }
         if (dialCodeLoad != null) {
-            ussdApi.callUSSDInvoke("*167#", simSlotId, map, new USSDController.CallbackInvoke() {
+            ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
                 @Override
                 public void responseInvoke(String message) {
                     if (message.contains("Do you want to continue?")) {
@@ -2864,6 +2985,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        countdownHandler.removeCallbacks(countdownRunnable);
         if (screenExe != null) {
             screenExe.cancel();
         }

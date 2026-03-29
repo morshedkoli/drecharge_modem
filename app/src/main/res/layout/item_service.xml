@@ -93,6 +93,19 @@
 
     </LinearLayout>
 
+    <!-- Schedule hint — visible only when a schedule is configured -->
+    <TextView
+        android:id="@+id/svcSchedule"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:paddingStart="28dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="8dp"
+        android:textSize="11sp"
+        android:textColor="@color/teal_primary"
+        android:fontFamily="monospace"/>
+
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"

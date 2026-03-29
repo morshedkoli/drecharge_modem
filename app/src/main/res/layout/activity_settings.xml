@@ -80,6 +80,22 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <!-- ── Exit Button ── -->
+    <Button
+        android:id="@+id/exitAppBtn"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="12dp"
+        android:text="Exit App"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:background="@drawable/bg_btn_cancel"
+        android:insetTop="0dp"
+        android:insetBottom="0dp"/>
+
     <!-- ── Service List Card ── -->
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"

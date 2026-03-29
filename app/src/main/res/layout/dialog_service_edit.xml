@@ -39,6 +39,11 @@
     </LinearLayout>
 
     <!-- Form body -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fillViewport="false">
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -171,7 +176,196 @@
             android:textColor="@color/text_primary"
             android:textColorHint="@color/text_hint"
             android:background="@drawable/bg_rounded_input"
+            android:layout_marginBottom="14dp"/>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider"
+            android:layout_marginBottom="14dp"/>
+
+        <!-- USSD Dial Code section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="USSD DIAL CODE"
+            android:textSize="11sp"
+            android:textColor="@color/teal_primary"
+            android:textStyle="bold"
+            android:letterSpacing="0.06"
+            android:layout_marginBottom="4dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Placeholders: {PHONE}  {AMOUNT}  {PIN}"
+            android:textSize="11sp"
+            android:textColor="@color/text_hint"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="12dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Type 1 (Commission / Default)"
+            android:textSize="11sp"
+            android:textColor="@color/text_secondary"
+            android:textStyle="bold"
+            android:letterSpacing="0.04"
+            android:layout_marginBottom="6dp"/>
+
+        <EditText
+            android:id="@+id/dialogDialCode1Et"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="e.g. *444*{PHONE}*{AMOUNT}*0*{PIN}#"
+            android:inputType="text"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:background="@drawable/bg_rounded_input"
+            android:layout_marginBottom="12dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Type 0 (Prepaid) — leave blank if same as above"
+            android:textSize="11sp"
+            android:textColor="@color/text_secondary"
+            android:textStyle="bold"
+            android:letterSpacing="0.04"
+            android:layout_marginBottom="6dp"/>
+
+        <EditText
+            android:id="@+id/dialogDialCode0Et"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="e.g. *8383*3*{PHONE}*{AMOUNT}*{PIN}#"
+            android:inputType="text"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:background="@drawable/bg_rounded_input"
             android:layout_marginBottom="20dp"/>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider"
+            android:layout_marginBottom="14dp"/>
+
+        <!-- Schedule section -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="SCHEDULE"
+                android:textSize="11sp"
+                android:textColor="@color/teal_primary"
+                android:textStyle="bold"
+                android:letterSpacing="0.06"/>
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/dialogScheduleSw"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Auto enable/disable this service on a daily time window"
+            android:textSize="11sp"
+            android:textColor="@color/text_hint"
+            android:layout_marginBottom="12dp"/>
+
+        <!-- Time row container — hidden when schedule switch is off -->
+        <LinearLayout
+            android:id="@+id/scheduleTimeContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone"
+            android:layout_marginBottom="16dp">
+
+            <!-- Enable At row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="10dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Enable At"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/dialogScheduleStartTv"
+                    android:layout_width="96dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:hint="--:--"
+                    android:textSize="15sp"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"
+                    android:fontFamily="monospace"
+                    android:background="@drawable/bg_rounded_input"/>
+
+            </LinearLayout>
+
+            <!-- Disable At row -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Disable At"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/dialogScheduleEndTv"
+                    android:layout_width="96dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:hint="--:--"
+                    android:textSize="15sp"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"
+                    android:fontFamily="monospace"
+                    android:background="@drawable/bg_rounded_input"/>
+
+            </LinearLayout>
+
+        </LinearLayout>
 
         <!-- Buttons -->
         <LinearLayout
@@ -209,4 +403,5 @@
 
         </LinearLayout>
     </LinearLayout>
+    </ScrollView>
 </LinearLayout>
