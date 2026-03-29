@@ -1,6 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#6200EE</color>
-    <color name="colorPrimaryDark">#3700B3</color>
-    <color name="colorAccent">#03DAC5</color>
+    <color name="colorPrimary">#00695C</color>
+    <color name="colorPrimaryDark">#004D40</color>
+    <color name="colorAccent">#1DE9B6</color>
+
+    <color name="bg_screen">#EEF2F7</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="header_start">#003D33</color>
+    <color name="header_end">#00897B</color>
+    <color name="text_primary">#1B2838</color>
+    <color name="text_secondary">#6B7280</color>
+    <color name="text_hint">#9CA3AF</color>
+    <color name="divider">#E5E9F0</color>
+    <color name="active_green">#10B981</color>
+    <color name="active_bg">#D1FAE5</color>
+    <color name="inactive_grey">#9CA3AF</color>
+    <color name="inactive_bg">#F3F4F6</color>
+    <color name="teal_primary">#00897B</color>
+    <color name="teal_dark">#004D40</color>
+    <color name="teal_light">#B2DFDB</color>
+    <color name="icon_overlay">#33FFFFFF</color>
+    <color name="danger">#EF4444</color>
+    <color name="log_text">#00695C</color>
 </resources>

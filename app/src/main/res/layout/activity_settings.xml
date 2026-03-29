@@ -1,237 +1,177 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:orientation="vertical"
+    android:background="@color/bg_screen">
 
-    <LinearLayout
+    <!-- ── Server Domain Card ── -->
+    <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Settings"
-            android:textSize="24sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Configure domain, polling interval, and service settings for each SIM." />
+        android:layout_margin="16dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="4dp"
+        app:cardBackgroundColor="@color/surface">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:background="#FFFFFF"
             android:orientation="vertical"
             android:padding="16dp">
 
-            <TextView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="General"
-                android:textStyle="bold" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="12dp">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Server domain" />
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="16dp"
+                    android:background="@color/teal_primary"
+                    android:layout_marginEnd="10dp"/>
 
-            <EditText
-                android:id="@+id/settingsDomainEt"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="example.com"
-                android:inputType="textUri" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Server Domain"
+                    android:textStyle="bold"
+                    android:textSize="14sp"
+                    android:textColor="@color/text_primary"/>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Polling interval in seconds" />
+            </LinearLayout>
 
-            <EditText
-                android:id="@+id/settingsIntervalEt"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="30"
-                android:inputType="number" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <EditText
+                    android:id="@+id/domainEt"
+                    android:layout_width="0dp"
+                    android:layout_height="46dp"
+                    android:layout_weight="1"
+                    android:hint="e.g. https://example.com"
+                    android:inputType="textUri"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_hint"
+                    android:background="@drawable/bg_rounded_input"
+                    android:layout_marginEnd="10dp"/>
+
+                <Button
+                    android:id="@+id/domainSaveBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="46dp"
+                    android:text="Save"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/bg_btn_confirm"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"/>
+
+            </LinearLayout>
         </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
-        <LinearLayout
-            android:id="@+id/settingsSim1Card"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="#FFFFFF"
-            android:orientation="vertical"
-            android:padding="16dp">
-
-            <TextView
-                android:id="@+id/settingsSim1Title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="SIM 1"
-                android:textStyle="bold" />
-
-            <Switch
-                android:id="@+id/settingsSim1EnabledSw"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Enable service" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Service" />
-
-            <Spinner
-                android:id="@+id/settingsSim1ServiceSp"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="SIM number" />
-
-            <EditText
-                android:id="@+id/settingsSim1NumberEt"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="01XXXXXXXXX"
-                android:inputType="phone" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="PIN" />
-
-            <EditText
-                android:id="@+id/settingsSim1PinEt"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="PIN"
-                android:inputType="numberPassword" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Minimum balance" />
-
-            <EditText
-                android:id="@+id/settingsSim1MinBalanceEt"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="0"
-                android:inputType="numberDecimal" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/settingsSim2Card"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="#FFFFFF"
-            android:orientation="vertical"
-            android:padding="16dp">
-
-            <TextView
-                android:id="@+id/settingsSim2Title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="SIM 2"
-                android:textStyle="bold" />
-
-            <Switch
-                android:id="@+id/settingsSim2EnabledSw"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Enable service" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Service" />
-
-            <Spinner
-                android:id="@+id/settingsSim2ServiceSp"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="SIM number" />
-
-            <EditText
-                android:id="@+id/settingsSim2NumberEt"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="01XXXXXXXXX"
-                android:inputType="phone" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="PIN" />
-
-            <EditText
-                android:id="@+id/settingsSim2PinEt"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="PIN"
-                android:inputType="numberPassword" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="Minimum balance" />
-
-            <EditText
-                android:id="@+id/settingsSim2MinBalanceEt"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="0"
-                android:inputType="numberDecimal" />
-        </LinearLayout>
+    <!-- ── Service List Card ── -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="4dp"
+        app:cardBackgroundColor="@color/surface">
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:gravity="end"
-            android:orientation="horizontal">
+            android:layout_height="match_parent"
+            android:orientation="vertical">
 
-            <Button
-                android:id="@+id/settingsCancelBtn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Cancel" />
+            <!-- Column Headers -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:background="@drawable/bg_gradient_header"
+                android:paddingStart="14dp"
+                android:paddingEnd="8dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-            <Button
-                android:id="@+id/settingsSaveBtn"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:text="Save" />
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="SERVICE"
+                    android:textStyle="bold"
+                    android:textSize="11sp"
+                    android:textColor="#FFFFFF"
+                    android:letterSpacing="0.08"/>
+
+                <TextView
+                    android:layout_width="52dp"
+                    android:layout_height="wrap_content"
+                    android:text="PIN"
+                    android:textStyle="bold"
+                    android:textSize="11sp"
+                    android:textColor="#FFFFFF"
+                    android:gravity="center"
+                    android:letterSpacing="0.06"/>
+
+                <TextView
+                    android:layout_width="44dp"
+                    android:layout_height="wrap_content"
+                    android:text="SIM"
+                    android:textStyle="bold"
+                    android:textSize="11sp"
+                    android:textColor="#FFFFFF"
+                    android:gravity="center"
+                    android:letterSpacing="0.06"/>
+
+                <TextView
+                    android:layout_width="56dp"
+                    android:layout_height="wrap_content"
+                    android:text="STATUS"
+                    android:textStyle="bold"
+                    android:textSize="11sp"
+                    android:textColor="#FFFFFF"
+                    android:gravity="center"
+                    android:letterSpacing="0.06"/>
+
+                <View
+                    android:layout_width="48dp"
+                    android:layout_height="1dp"/>
+
+            </LinearLayout>
+
+            <!-- Rows -->
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:id="@+id/serviceListContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"/>
+
+            </ScrollView>
+
         </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
-    </LinearLayout>
-</ScrollView>
+</LinearLayout>

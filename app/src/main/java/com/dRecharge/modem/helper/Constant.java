@@ -2,7 +2,6 @@ package com.dRecharge.modem.helper;
 
 
 import android.os.Build;
-import android.os.Bundle;
 import android.util.Base64;
 
 import java.security.InvalidAlgorithmParameterException;
@@ -33,16 +32,12 @@ public class Constant {
     public static String savedSim2ServiceCode = "";
     public static int savedSim2Service = -1;
     public static String savedSim2ServiceName = "";
-    public static String getSim2ResponseKey = null;
-
     public static String sim1 = "";
     public static int sim1Id = -1;
-    public static int sim1Slot = -1;
     public static String sim1Num = "";
 
     public static String sim2 = "";
     public static int sim2Id = -1;
-    public static int sim2Slot = -1;
     public static String sim2Num = "";
 
     public static String getSim1Bal = "";
@@ -276,16 +271,5 @@ public class Constant {
         return new String(cipher.doFinal(values));
     }
 
-    public static String bundle2string(Bundle bundle) {
-        if (bundle == null) {
-            return null;
-        }
-        String string = "Bundle{";
-        for (String key : bundle.keySet()) {
-            string += " " + key + " => " + bundle.get(key) + ";";
-        }
-        string += " }Bundle";
-        return string;
-    }
-
 }
+

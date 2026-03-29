@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@color/surface">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="13dp"
+        android:paddingBottom="13dp"
+        android:gravity="center_vertical">
+
+        <!-- Service name with left accent dot -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <View
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:background="@drawable/bg_icon_btn"
+                android:backgroundTint="@color/teal_primary"
+                android:layout_marginEnd="8dp"/>
+
+            <TextView
+                android:id="@+id/svcName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="@color/text_primary"
+                android:textStyle="bold"
+                android:text="Service"/>
+
+        </LinearLayout>
+
+        <!-- PIN -->
+        <TextView
+            android:id="@+id/svcPin"
+            android:layout_width="52dp"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:gravity="center"
+            android:text="No PIN"
+            android:textColor="@color/text_hint"/>
+
+        <!-- SIM -->
+        <TextView
+            android:id="@+id/svcSim"
+            android:layout_width="44dp"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:gravity="center"
+            android:textColor="@color/text_secondary"
+            android:text="SIM 1"/>
+
+        <!-- Status badge -->
+        <TextView
+            android:id="@+id/svcStatus"
+            android:layout_width="56dp"
+            android:layout_height="wrap_content"
+            android:textSize="10sp"
+            android:gravity="center"
+            android:textStyle="bold"
+            android:text="Inactive"
+            android:textColor="@color/inactive_grey"
+            android:background="@drawable/bg_badge"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"/>
+
+        <!-- Edit -->
+        <TextView
+            android:id="@+id/svcEdit"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:text="Edit"
+            android:textSize="12sp"
+            android:textColor="@color/teal_primary"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"/>
+
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/divider"
+        android:layout_marginStart="14dp"/>
+
+</LinearLayout>

@@ -13,9 +13,10 @@ public final class ServiceCatalog {
         return Arrays.asList(
                 SELECT_ONE,
                 "Grameen",
+                "Skitto",
                 "Robi",
                 "Airtel",
-                "bLink",
+                "Banglalink",
                 "Taletalk",
                 "bKash-Load",
                 "Nagad-Load",
@@ -36,11 +37,13 @@ public final class ServiceCatalog {
         switch (serviceName) {
             case "Grameen":
                 return "GP";
+            case "Skitto":
+                return "SK";
             case "Robi":
                 return "RB";
             case "Airtel":
                 return "AT";
-            case "bLink":
+            case "Banglalink":
                 return "BL";
             case "Taletalk":
                 return "TT";

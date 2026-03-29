@@ -11,6 +11,7 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 public class USSDService extends AccessibilityService {
@@ -285,10 +286,14 @@ public class USSDService extends AccessibilityService {
      */
     private boolean LoginView(AccessibilityEvent event) {
         String text = getEventText(event);
-        return isUSSDWidget(event)
-                && !text.isEmpty()
-                && USSDController.instance.map.get(USSDController.KEY_LOGIN)
-                .contains(text);
+        if (!isUSSDWidget(event) || text.isEmpty()) {
+            return false;
+        }
+        if (USSDController.instance == null || USSDController.instance.map == null) {
+            return false;
+        }
+        HashSet<String> loginSet = USSDController.instance.map.get(USSDController.KEY_LOGIN);
+        return loginSet != null && loginSet.contains(text);
     }
 
     /**
@@ -299,10 +304,14 @@ public class USSDService extends AccessibilityService {
      */
     protected boolean problemView(AccessibilityEvent event) {
         String text = getEventText(event);
-        return isUSSDWidget(event)
-                && !text.isEmpty()
-                && USSDController.instance.map.get(USSDController.KEY_ERROR)
-                .contains(text);
+        if (!isUSSDWidget(event) || text.isEmpty()) {
+            return false;
+        }
+        if (USSDController.instance == null || USSDController.instance.map == null) {
+            return false;
+        }
+        HashSet<String> errorSet = USSDController.instance.map.get(USSDController.KEY_ERROR);
+        return errorSet != null && errorSet.contains(text);
     }
 
     private static String getEventText(AccessibilityEvent event) {

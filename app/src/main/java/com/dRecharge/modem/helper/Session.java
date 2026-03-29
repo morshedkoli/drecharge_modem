@@ -2,17 +2,9 @@ package com.dRecharge.modem.helper;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.BitmapShader;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.Shader;
-import android.os.Environment;
 
-
-import java.io.File;
-
+import java.util.ArrayList;
+import java.util.List;
 
 public class Session {
     SharedPreferences pref;
@@ -26,7 +18,6 @@ public class Session {
 
     public static final String SIM1_INFO = "sim1Info";
     public static final String SIM2_INFO = "sim2Info";
-
 
     // SIM 1 SESSION DATA
     public static final String SIM1_ID = "sim1id";
@@ -57,7 +48,6 @@ public class Session {
         this._context = context;
         pref = _context.getSharedPreferences(PREFER_NAME, PRIVATE_MODE);
         editor = pref.edit();
-        editor.apply();
     }
 
     public String getData(String id) {
@@ -65,7 +55,7 @@ public class Session {
     }
 
     public int getIntData(String id) {
-        return pref.getInt(id,-1);
+        return pref.getInt(id, -1);
     }
 
     public boolean getBooleanData(String id) {
@@ -74,71 +64,36 @@ public class Session {
 
     public void setData(String id, String val) {
         editor.putString(id, val);
-        editor.commit();
         editor.apply();
     }
 
     public void setIntData(String id, int val) {
         editor.putInt(id, val);
-        editor.commit();
         editor.apply();
     }
 
-    public void  SetSim1Info(Boolean sim1Info, String sim1Num,String sim1Pin, String sim1MinBal, String sim1Time){
+    public void SetSim1Info(Boolean sim1Info, String sim1Num, String sim1Pin, String sim1MinBal, String sim1Time) {
         editor.putBoolean(SIM1_INFO, sim1Info);
         editor.putString(SIM1_NUMBER, sim1Num);
         editor.putString(SIM1_PIN, sim1Pin);
         editor.putString(SIM1_MIN_BAL, sim1MinBal);
         editor.putString(SIM1_TIME, sim1Time);
-        editor.commit();
         editor.apply();
     }
 
-    public void  SetSim2Info(Boolean sim2Info,String sim2Num, String sim2Pin, String sim2MinBal, String sim2Time){
+    public void SetSim2Info(Boolean sim2Info, String sim2Num, String sim2Pin, String sim2MinBal, String sim2Time) {
         editor.putBoolean(SIM2_INFO, sim2Info);
         editor.putString(SIM2_NUMBER, sim2Num);
         editor.putString(SIM2_PIN, sim2Pin);
         editor.putString(SIM2_MIN_BAL, sim2MinBal);
         editor.putString(SIM2_TIME, sim2Time);
-        editor.commit();
         editor.apply();
     }
 
     public void setBooleanData(String id, Boolean val) {
         editor.putBoolean(id, val);
-        editor.commit();
         editor.apply();
     }
-
-//    public void createUserLoginSession(String id, String name, String mobile, String address, String status, String apikey) {
-//        editor.putBoolean(IS_DOMAIN_VALIED, true);
-//        editor.commit();
-//    }
-
-
-//    public boolean checkLogin() {
-//        if (!this.isUserLoggedIn()) {
-//            Intent i = new Intent(_context, LoginActivity.class);
-//            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-//            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-//            _context.startActivity(i);
-//            return true;
-//        }
-//        return false;
-//    }
-
-//    public void logoutUser(Activity activity) {
-//
-//        editor.clear();
-//        editor.commit();
-//
-//        Intent i = new Intent(activity, LoginActivity.class);
-//        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
-//        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-//        activity.startActivity(i);
-//        activity.finish();
-//
-//    }
 
     public boolean isDomainValid() {
         return pref.getBoolean(IS_DOMAIN_VALIED, false);
@@ -152,20 +107,53 @@ public class Session {
         return pref.getBoolean(SIM2_INFO, false);
     }
 
-    public Bitmap getRoundedBitmap(Bitmap bitmap) {
-        Bitmap circleBitmap = Bitmap.createBitmap(bitmap.getWidth(), bitmap.getHeight(), Bitmap.Config.ARGB_8888);
-        BitmapShader shader = new BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        Paint paint = new Paint();
-        paint.setShader(shader);
-        paint.setAntiAlias(true);
-        Canvas c = new Canvas(circleBitmap);
-        c.drawCircle(bitmap.getWidth() / 2, bitmap.getHeight() / 2, bitmap.getWidth() / 2, paint);
-        return circleBitmap;
+    // ── Per-service configuration ────────────────────────────────────────────
+
+    private static String svcKey(String name, String field) {
+        // e.g. "svc_bKash_Agent_SIM_pin"
+        return "svc_" + name.replaceAll("[^a-zA-Z0-9]", "_") + "_" + field;
     }
 
-    public static Bitmap getBitmapFromURL(String src) {
-        File bitmapFile = new File(Environment.getExternalStorageDirectory() + "/" + src);
-        Bitmap bitmap = BitmapFactory.decodeFile(String.valueOf(bitmapFile));
-        return bitmap;
+    public ServiceConfig getServiceConfig(String name) {
+        ServiceConfig cfg = new ServiceConfig(name);
+        cfg.pin    = pref.getString(svcKey(name, "pin"), "");
+        cfg.sim    = pref.getInt(svcKey(name, "sim"), 1);
+        cfg.number = pref.getString(svcKey(name, "number"), "");
+        cfg.active = pref.getBoolean(svcKey(name, "active"), false);
+        return cfg;
+    }
+
+    public void saveServiceConfig(ServiceConfig cfg) {
+        editor.putString(svcKey(cfg.name, "pin"), cfg.pin);
+        editor.putInt(svcKey(cfg.name, "sim"), cfg.sim);
+        editor.putString(svcKey(cfg.name, "number"), cfg.number);
+        editor.putBoolean(svcKey(cfg.name, "active"), cfg.active);
+        editor.apply();
+    }
+
+    /** Returns all service configs that are marked active for the given SIM slot (1 or 2). */
+    public List<ServiceConfig> getActiveServicesForSim(int sim) {
+        List<String> all = ServiceCatalog.getServices();
+        List<ServiceConfig> result = new ArrayList<>();
+        for (String name : all) {
+            if (ServiceCatalog.SELECT_ONE.equals(name)) continue;
+            ServiceConfig cfg = getServiceConfig(name);
+            if (cfg.active && cfg.sim == sim) {
+                result.add(cfg);
+            }
+        }
+        return result;
+    }
+
+    /** Returns all active service configs (both SIMs). */
+    public List<ServiceConfig> getAllActiveServices() {
+        List<String> all = ServiceCatalog.getServices();
+        List<ServiceConfig> result = new ArrayList<>();
+        for (String name : all) {
+            if (ServiceCatalog.SELECT_ONE.equals(name)) continue;
+            ServiceConfig cfg = getServiceConfig(name);
+            if (cfg.active) result.add(cfg);
+        }
+        return result;
     }
 }

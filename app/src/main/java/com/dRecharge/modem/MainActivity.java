@@ -12,6 +12,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -36,6 +37,7 @@ import com.dRecharge.modem.apimodel.InsertMessageModel;
 import com.dRecharge.modem.databinding.ActivityMainBinding;
 import com.dRecharge.modem.helper.Constant;
 import com.dRecharge.modem.helper.ServiceCatalog;
+import com.dRecharge.modem.helper.ServiceConfig;
 import com.dRecharge.modem.helper.Session;
 import com.dRecharge.modem.receiver.SMSBReceiver;
 import com.dRecharge.modem.server.ModemServerRepository;
@@ -59,9 +61,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.CountDownLatch;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
@@ -90,7 +92,6 @@ import static com.dRecharge.modem.helper.Constant.sim1Num;
 import static com.dRecharge.modem.helper.Constant.sim2;
 import static com.dRecharge.modem.helper.Constant.sim2Id;
 import static com.dRecharge.modem.helper.Constant.sim2Num;
-import static com.dRecharge.modem.helper.Constant.sim2Slot;
 import static com.dRecharge.modem.helper.Session.SIM1_SERVICE_CODE;
 import static com.dRecharge.modem.helper.Session.SIM2_SERVICE_CODE;
 
@@ -103,14 +104,11 @@ public class MainActivity extends AppCompatActivity {
     String TAG = "TAG_ACC";
     String dialCodeLoad = null;
     String dialCodeType = "1";
-    LoadingDialog loadingDialog = new LoadingDialog(MainActivity.this);
+    LoadingDialog loadingDialog;
 
     public static Context contextOfApplication;
     private USSDApi ussdApi;
     private ModemServerRepository serverRepository;
-
-    private boolean _isWorkSim1 = false;
-    private boolean _isWorkSim2 = false;
 
     // রিকোয়েস্ট কিউ সিস্টেম - প্রতিটি SIM এর জন্য আলাদা কিউ
     // Request Queue System - Separate queue for each SIM
@@ -118,20 +116,23 @@ public class MainActivity extends AppCompatActivity {
     private Queue<RequestData> requestQueueSim2 = new LinkedList<>();
     private boolean isProcessingSim1 = false; // SIM1 এর জন্য রিকোয়েস্ট প্রসেস হচ্ছে কিনা
     private boolean isProcessingSim2 = false; // SIM2 এর জন্য রিকোয়েস্ট প্রসেস হচ্ছে কিনা
-    private boolean isFetchingPendingSim1 = false; // SIM1 এর জন্য getNewPending কল হচ্ছে কিনা (multiple requests prevent করতে)
-    private boolean isFetchingPendingSim2 = false; // SIM2 এর জন্য getNewPending কল হচ্ছে কিনা (multiple requests prevent করতে)
+    private Set<String> isFetchingPendingSim1 = new HashSet<>(); // SIM1 এর জন্য fetch হচ্ছে এমন service names
+    private Set<String> isFetchingPendingSim2 = new HashSet<>(); // SIM2 এর জন্য fetch হচ্ছে এমন service names
 
     // Balance check tracking - Balance check শেষ হওয়ার পর request fetch করার জন্য
-    private boolean isBalanceCheckCompleteSim1 = false; // SIM1 এর balance check সম্পূর্ণ হয়েছে কিনা
-    private boolean isBalanceCheckCompleteSim2 = false; // SIM2 এর balance check সম্পূর্ণ হয়েছে কিনা
     private boolean isWaitingForBalanceCheckSim1 = false; // SIM1 এর জন্য balance check শেষ হওয়ার অপেক্ষা করছে কিনা
     private boolean isWaitingForBalanceCheckSim2 = false; // SIM2 এর জন্য balance check শেষ হওয়ার অপেক্ষা করছে কিনা
+    private boolean isSyncingSwitch = false; // Prevents balance check re-trigger during session restore
 
     // গ্লোবাল লক - একবারে শুধুমাত্র একটি SIM প্রসেস করবে
     // Global lock - Only one SIM will process at a time
     private boolean isAnySimProcessing = false;
-    private int lastProcessedSimId = -1; // শেষ কোন SIM প্রসেস করেছে
     private long simProcessingDelay = 30000; // ডিফল্ট: 30 সেকেন্ড (30000ms) - একটি SIM শেষ হওয়ার পর আরেকটি SIM শুরু করার আগে অপেক্ষা
+
+    // Safety timeout - if a USSD chain fails mid-step and never calls onRequestCompleted(), this resets the lock
+    private Runnable safetyTimeoutRunnable1 = null;
+    private Runnable safetyTimeoutRunnable2 = null;
+    private static final long REQUEST_SAFETY_TIMEOUT_MS = 60000; // 60s: covers USSD timeout(25s) + longest multi-step chain
 
     Handler handler = new Handler();
     Timer simOneExe, simTwoExe, screenExe;
@@ -145,28 +146,31 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        if (getSupportActionBar() != null) getSupportActionBar().hide();
+
         activityMainBinding = DataBindingUtil.setContentView(this, R.layout.activity_main);
         ins = this;
         contextOfApplication = getApplicationContext();
-        findViewById(R.id.homeSettingsBtn).setOnClickListener(v -> openSettingsScreen());
-
         session = new Session(MainActivity.this);
+        loadingDialog = new LoadingDialog(MainActivity.this);
         ussdApi = USSDController.getInstance(contextOfApplication);
 
-        activityMainBinding.receivedRq1Tv.setVisibility(View.GONE);
-        activityMainBinding.receivedRq2Tv.setVisibility(View.GONE);
-        activityMainBinding.sendReq1Tv.setVisibility(View.GONE);
-        activityMainBinding.sendReq2Tv.setVisibility(View.GONE);
+        activityMainBinding.homeSettingsBtn.setOnClickListener(v -> openSettingsScreen());
+        activityMainBinding.powerBtn.setOnClickListener(v -> toggleService());
 
-        if (!isAccessServiceEnabled(getApplicationContext(), USSDService.class)) {
-            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+        updatePowerButtonState(false);
+
+        if (!isSetupComplete()) {
+            startActivity(new Intent(this, PermissionActivity.class));
+            finish();
+            return;
         }
 
+        getsSimServiceInfo();
         init();
         simServiceSelect();
         sim1Setting();
         sim2Setting();
-        getsSimServiceInfo();
         serviceOnOff();
         reloadHomeFromSession();
 
@@ -206,6 +210,17 @@ public class MainActivity extends AppCompatActivity {
 
     private void openSettingsScreen() {
         startActivity(new Intent(this, SettingsActivity.class));
+    }
+
+    private void toggleService() {
+        boolean anyOn = activityMainBinding.status1Sw.isChecked() || activityMainBinding.status2Sw.isChecked();
+        activityMainBinding.status1Sw.setChecked(!anyOn);
+        activityMainBinding.status2Sw.setChecked(!anyOn);
+        updatePowerButtonState(!anyOn);
+    }
+
+    private void updatePowerButtonState(boolean isOn) {
+        activityMainBinding.powerBtn.setColorFilter(isOn ? Color.parseColor("#4CAF50") : Color.parseColor("#F44336"));
     }
 
     private void reloadHomeFromSession() {
@@ -262,8 +277,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void syncEnabledSwitchesFromSession() {
+        isSyncingSwitch = true;
         activityMainBinding.status1Sw.setChecked(session.getBooleanData(Session.SIM1_ENABLED));
         activityMainBinding.status2Sw.setChecked(session.getBooleanData(Session.SIM2_ENABLED));
+        isSyncingSwitch = false;
+        activityMainBinding.checkBal1Btn.setEnabled(activityMainBinding.status1Sw.isChecked());
+        activityMainBinding.checkBal2Btn.setEnabled(activityMainBinding.status2Sw.isChecked());
+        refreshPowerButton();
     }
 
     private String buildSimLabel(String carrier, String number, int id, String serviceName) {
@@ -293,6 +313,31 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //region Settings And Service
+
+    private boolean isSetupComplete() {
+        // Check critical runtime permissions
+        String[] required = {
+            Manifest.permission.CALL_PHONE,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.RECEIVE_SMS,
+            Manifest.permission.READ_SMS,
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.GET_ACCOUNTS,
+        };
+        for (String p : required) {
+            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+        // Check accessibility service
+        return isAccessServiceEnabled(getApplicationContext(), USSDService.class);
+    }
 
     public boolean isAccessServiceEnabled(Context context, Class accessibilityServiceClass) {
         String prefString = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
@@ -393,43 +438,37 @@ public class MainActivity extends AppCompatActivity {
             map.put("KEY_LOGIN", new HashSet<String>(Arrays.asList("running...", "waiting", "loading", "esperando")));
             map.put("KEY_ERROR", new HashSet<String>(Arrays.asList("problema", "problem", "error", "null")));
 
-            if (session.isSim1Valid()) {
-                sim1Id = Integer.parseInt(session.getData(Session.SIM1_ID));
-                sim1Num = session.getData(Session.SIM1_NUMBER);
-                savedSim1Pin = session.getData(Session.SIM1_PIN);
-                savedSim1Time = session.getData(Session.SIM1_TIME);
-                savedSim1Bal = session.getData(Session.SIM1_MIN_BAL);
-                savedSim1ServiceCode = session.getData(SIM1_SERVICE_CODE);
-                activityMainBinding.pin1Tv.setText(session.getData(Session.SIM1_PIN));
+            boolean hasSim1Config = session.isSim1Valid() || !session.getActiveServicesForSim(1).isEmpty();
+            if (hasSim1Config) {
+                if (session.isSim1Valid()) {
+                    String storedId = session.getData(Session.SIM1_ID);
+                    if (!storedId.isEmpty()) sim1Id = Integer.parseInt(storedId);
+                    String storedNum = session.getData(Session.SIM1_NUMBER);
+                    if (!storedNum.isEmpty()) sim1Num = storedNum;
+                    savedSim1Pin = session.getData(Session.SIM1_PIN);
+                    savedSim1Time = session.getData(Session.SIM1_TIME);
+                    savedSim1Bal = session.getData(Session.SIM1_MIN_BAL);
+                    savedSim1ServiceCode = session.getData(SIM1_SERVICE_CODE);
+                    savedSim1Service = session.getData(Session.SIM1_SERVICE).isEmpty() ? 0 : Integer.parseInt(session.getData(Session.SIM1_SERVICE));
+                    savedSim1ServiceName = session.getData(Session.SIM1_SERVICE_NAME);
+                }
+                activityMainBinding.pin1Tv.setText(savedSim1Pin);
 
-                // Interval time display - default 30 seconds if not set
                 String timeIntervalStr = session.getData(Session.TIME_INTERVAL);
                 if (timeIntervalStr == null || timeIntervalStr.trim().isEmpty()) {
                     activityMainBinding.minIntrval1Tv.setText("ইন্টারভাল: ডিফল্ট 30 সেকেন্ড");
                 } else {
                     activityMainBinding.minIntrval1Tv.setText("ইন্টারভাল: " + timeIntervalStr + " সেকেন্ড");
                 }
-                activityMainBinding.minBal1Tv.setText("Balance Limit: " + session.getData(Session.SIM1_MIN_BAL));
-
-                savedSim1Service = session.getData(Session.SIM1_SERVICE).isEmpty() ? 0 : Integer.parseInt(session.getData(Session.SIM1_SERVICE));
-                savedSim1ServiceName = session.getData(Session.SIM1_SERVICE_NAME).isEmpty() ? "" : session.getData(Session.SIM1_SERVICE_NAME);
-                Log.d("USD_INFO","savedSim1ServiceName "+ savedSim1ServiceName);
-//            Toast.makeText()
+                activityMainBinding.minBal1Tv.setText("Balance Limit: " + savedSim1Bal);
                 activityMainBinding.Sim1Layout.setVisibility(View.VISIBLE);
                 activityMainBinding.sim1Status.setVisibility(View.GONE);
                 activityMainBinding.sim1Tv.setText(sim1 + "  | " + sim1Num + " | Id: " + sim1Id);
 
                 Log.d("USD_TIMER","timer init");
-
-
                 simOneExe = new Timer();
-                // Timer.schedule(কাজ, প্রথমবার কতক্ষণ পর শুরু হবে, কতক্ষণ পর পর কাজ করবে)
-                // simOneSchedule() = SIM 1 এর জন্য কাজ
-                // 1000 = প্রথমবার 1 সেকেন্ড (1000ms) পর শুরু হবে
-                // getTimerTime() = এরপর প্রতি X সেকেন্ড পর পর কাজ করবে (যেমন: 30 সেকেন্ড = 30000ms)
                 simOneExe.schedule(simOneSchedule(), 1000, getTimerTime());
-//                simOneExe.schedule(simOneSchedule(), 1000, (interval * 1000L));
-            }else{
+            } else {
                 Log.d("USD_TIMER","SIM_DATA_NOT_FOUND");
             }
         }catch (Exception e) {
@@ -438,15 +477,21 @@ public class MainActivity extends AppCompatActivity {
         }
 
         try{
-            if (session.isSim2Valid()) {
-                sim2Id = Integer.parseInt(session.getData(Session.SIM2_ID));
-                sim2Num = session.getData(Session.SIM2_NUMBER);
-                savedSim2Pin = session.getData(Session.SIM2_PIN);
-                savedSim2Time = session.getData(Session.SIM2_TIME);
-                savedSim2Bal = session.getData(Session.SIM2_MIN_BAL);
-                savedSim2ServiceCode = session.getData(SIM2_SERVICE_CODE);
+            boolean hasSim2Config = session.isSim2Valid() || !session.getActiveServicesForSim(2).isEmpty();
+            if (hasSim2Config) {
+                if (session.isSim2Valid()) {
+                    String storedId2 = session.getData(Session.SIM2_ID);
+                    if (!storedId2.isEmpty()) sim2Id = Integer.parseInt(storedId2);
+                    String storedNum2 = session.getData(Session.SIM2_NUMBER);
+                    if (!storedNum2.isEmpty()) sim2Num = storedNum2;
+                    savedSim2Pin = session.getData(Session.SIM2_PIN);
+                    savedSim2Time = session.getData(Session.SIM2_TIME);
+                    savedSim2Bal = session.getData(Session.SIM2_MIN_BAL);
+                    savedSim2ServiceCode = session.getData(SIM2_SERVICE_CODE);
+                    savedSim2Service = session.getData(Session.SIM2_SERVICE).isEmpty() ? 0 : Integer.parseInt(session.getData(Session.SIM2_SERVICE));
+                    savedSim2ServiceName = session.getData(Session.SIM2_SERVICE_NAME);
+                }
                 activityMainBinding.pin2Tv.setText(savedSim2Pin);
-                // Interval time display - default 30 seconds if not set
                 String timeIntervalStr2 = session.getData(Session.TIME_INTERVAL);
                 if (timeIntervalStr2 == null || timeIntervalStr2.trim().isEmpty()) {
                     activityMainBinding.minIntrval2Tv.setText("ইন্টারভাল: ডিফল্ট 30 সেকেন্ড");
@@ -454,17 +499,11 @@ public class MainActivity extends AppCompatActivity {
                     activityMainBinding.minIntrval2Tv.setText("ইন্টারভাল: " + timeIntervalStr2 + " সেকেন্ড");
                 }
                 activityMainBinding.minBal2Tv.setText("Balance Limit: " + savedSim2Bal);
-                savedSim2Service = session.getData(Session.SIM2_SERVICE).isEmpty() ? 0 : Integer.parseInt(session.getData(Session.SIM2_SERVICE));
-                savedSim2ServiceName = session.getData(Session.SIM2_SERVICE_NAME).isEmpty() ? "" : session.getData(Session.SIM2_SERVICE_NAME);
                 activityMainBinding.Sim2Layout.setVisibility(View.VISIBLE);
                 activityMainBinding.sim2Status.setVisibility(View.GONE);
                 activityMainBinding.sim2Tv.setText(sim2 + "  | " + sim2Num + " | Id: " + sim2Id);
 
                 simTwoExe = new Timer();
-                // Timer.schedule(কাজ, প্রথমবার কতক্ষণ পর শুরু হবে, কতক্ষণ পর পর কাজ করবে)
-                // simTwoSchedule() = SIM 2 এর জন্য কাজ
-                // 1000 = প্রথমবার 1 সেকেন্ড (1000ms) পর শুরু হবে
-                // getTimerTime() = এরপর প্রতি X সেকেন্ড পর পর কাজ করবে (যেমন: 30 সেকেন্ড = 30000ms)
                 simTwoExe.schedule(simTwoSchedule(), 1000, getTimerTime());
             }
         }catch (Exception e) {
@@ -482,11 +521,15 @@ public class MainActivity extends AppCompatActivity {
                 handler.post(simOneRunable = new Runnable() {
                     @Override
                     public void run() {
-                        Log.d("USD_TIMER","timer is runing");
-
-                        _isWorkSim1 = true;
-                        System.out.println("=====SIM1----RUN:: " + _isWorkSim1 + " STS_SIM2:: " + _isWorkSim2);
-                        getNewPending(savedSim1ServiceName, savedSim1ServiceCode, session.getData(Session.SIM1_NUMBER), getSim1Bal, String.valueOf(sim1Id), savedSim1Pin);
+                        Log.d("USD_TIMER","timer is running");
+                        List<ServiceConfig> cfgs = session.getActiveServicesForSim(1);
+                        if (!cfgs.isEmpty()) {
+                            for (ServiceConfig cfg : cfgs) {
+                                getNewPending(cfg.name, ServiceCatalog.getCodeForService(cfg.name), cfg.number, getSim1Bal, String.valueOf(sim1Id), cfg.pin);
+                            }
+                        } else {
+                            getNewPending(savedSim1ServiceName, savedSim1ServiceCode, session.getData(Session.SIM1_NUMBER), getSim1Bal, String.valueOf(sim1Id), savedSim1Pin);
+                        }
                     }
                 });
             }
@@ -501,9 +544,14 @@ public class MainActivity extends AppCompatActivity {
                 handler.post(simTwoRunable = new Runnable() {
                     @Override
                     public void run() {
-                        _isWorkSim2 = true;
-                        System.out.println("=====SIM2----RUN:: " + _isWorkSim2 + " STS_SIM1:: " + _isWorkSim1);
-                        getNewPending(savedSim2ServiceName, savedSim2ServiceCode, session.getData(Session.SIM2_NUMBER), getSim2Bal, String.valueOf(sim2Id), savedSim2Pin);
+                        List<ServiceConfig> cfgs = session.getActiveServicesForSim(2);
+                        if (!cfgs.isEmpty()) {
+                            for (ServiceConfig cfg : cfgs) {
+                                getNewPending(cfg.name, ServiceCatalog.getCodeForService(cfg.name), cfg.number, getSim2Bal, String.valueOf(sim2Id), cfg.pin);
+                            }
+                        } else {
+                            getNewPending(savedSim2ServiceName, savedSim2ServiceCode, session.getData(Session.SIM2_NUMBER), getSim2Bal, String.valueOf(sim2Id), savedSim2Pin);
+                        }
                     }
                 });
             }
@@ -514,65 +562,39 @@ public class MainActivity extends AppCompatActivity {
     public void updateSimBalanceTv(final String bal, final int slot) {
         try {
             if (slot == sim1Id) {
-                double balanceDouble = Double.parseDouble(bal.replaceAll(",", ""));
-                int finalBal = (int) balanceDouble;
-                if (finalBal <= Integer.parseInt(savedSim1Bal)) {
-                    activityMainBinding.status1Sw.setChecked(false);
-                }
-                if (finalBal >= Integer.parseInt(savedSim1Bal)) {
-                    activityMainBinding.status1Sw.setChecked(true);
-                }
                 getSim1Bal = bal;
                 activityMainBinding.getBal1Tv.setText("Balance: " + bal);
 
                 // Balance check সম্পূর্ণ হয়েছে - যদি status button ON থাকে এবং balance check এর অপেক্ষায় থাকে, তাহলে 30 সেকেন্ড পর request fetch শুরু করুন
                 // Balance check complete - if status button is ON and waiting for balance check, start fetching requests after 30 seconds
-                isBalanceCheckCompleteSim1 = true;
                 if (isWaitingForBalanceCheckSim1 && activityMainBinding.status1Sw.isChecked()) {
                     isWaitingForBalanceCheckSim1 = false;
-                    // 30 সেকেন্ড অপেক্ষা করে প্রথম request fetch করুন
-                    // Wait 30 seconds (using interval time) and then fetch first request
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
-                            // Status switch এখনো চালু আছে কিনা এবং queue খালি আছে কিনা চেক করুন
-                            // Check if status switch is still ON and queue is empty
                             if (activityMainBinding.status1Sw.isChecked() && !isProcessingSim1 && requestQueueSim1.isEmpty()) {
-                                getNewPending(savedSim1ServiceName, savedSim1ServiceCode, session.getData(Session.SIM1_NUMBER), getSim1Bal, String.valueOf(sim1Id), savedSim1Pin);
+                                fetchPendingForSim(1);
                             }
                         }
-                    }, getTimerTime()); // Interval time ব্যবহার করুন (default 30 সেকেন্ড) / Use interval time (default 30 seconds)
+                    }, getTimerTime());
                 }
             }
             if (slot == sim2Id) {
-                double balanceDouble = Double.parseDouble(bal.replaceAll(",", ""));
-                int finalBal = (int) balanceDouble;
-                if (finalBal <= Integer.parseInt(savedSim2Bal)) {
-                    activityMainBinding.status2Sw.setChecked(false);
-                }
-                if (finalBal >= Integer.parseInt(savedSim2Bal)) {
-                    activityMainBinding.status2Sw.setChecked(true);
-                }
                 getSim2Bal = bal;
                 activityMainBinding.getBal2Tv.setText("Balance: " + bal);
 
                 // Balance check সম্পূর্ণ হয়েছে - যদি status button ON থাকে এবং balance check এর অপেক্ষায় থাকে, তাহলে 30 সেকেন্ড পর request fetch শুরু করুন
                 // Balance check complete - if status button is ON and waiting for balance check, start fetching requests after 30 seconds
-                isBalanceCheckCompleteSim2 = true;
                 if (isWaitingForBalanceCheckSim2 && activityMainBinding.status2Sw.isChecked()) {
                     isWaitingForBalanceCheckSim2 = false;
-                    // 30 সেকেন্ড অপেক্ষা করে প্রথম request fetch করুন
-                    // Wait 30 seconds (using interval time) and then fetch first request
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
-                            // Status switch এখনো চালু আছে কিনা এবং queue খালি আছে কিনা চেক করুন
-                            // Check if status switch is still ON and queue is empty
                             if (activityMainBinding.status2Sw.isChecked() && !isProcessingSim2 && requestQueueSim2.isEmpty()) {
-                                getNewPending(savedSim2ServiceName, savedSim2ServiceCode, session.getData(Session.SIM2_NUMBER), getSim2Bal, String.valueOf(sim2Id), savedSim2Pin);
+                                fetchPendingForSim(2);
                             }
                         }
-                    }, getTimerTime()); // Interval time ব্যবহার করুন (default 30 সেকেন্ড) / Use interval time (default 30 seconds)
+                    }, getTimerTime());
                 }
             }
         } catch (Exception e) {
@@ -583,9 +605,9 @@ public class MainActivity extends AppCompatActivity {
     public void updateResultTv(final int slot, final String message) {
         MainActivity.this.runOnUiThread(new Runnable() {
             public void run() {
-                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+                SimpleDateFormat sdf = new SimpleDateFormat("hh:mm a", Locale.getDefault());
                 String currentDateandTime = sdf.format(new Date());
-                String newMessage = currentDateandTime + " :: " + message + "\n";
+                String newMessage = currentDateandTime + " " + message + "\n";
                 if (slot == sim1Id) {
                     // Latest history at top - prepend instead of append
                     String currentText = activityMainBinding.sim1ResutlRv.getText().toString();
@@ -638,54 +660,44 @@ public class MainActivity extends AppCompatActivity {
         SubscriptionManager subscriptionManager = (SubscriptionManager) getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //   ActivityCompat#requestPermissions
             return;
         }
         List<SubscriptionInfo> subscriptionInfoList = subscriptionManager.getActiveSubscriptionInfoList();
 
 
-        if (subscriptionInfoList != null) {
-            if (subscriptionInfoList.size() == 1) {
-                sim1 = subscriptionInfoList.get(0).getCarrierName().toString();
-                sim1Id = subscriptionInfoList.get(0).getSimSlotIndex();
-                if (subscriptionInfoList.get(0).getNumber() != null) {
-
-
-                    sim1Num = subscriptionInfoList.get(0).getNumber();
+        if (subscriptionInfoList != null && !subscriptionInfoList.isEmpty()) {
+            SubscriptionInfo info0 = subscriptionInfoList.get(0);
+            if (info0 != null) {
+                CharSequence carrierName0 = info0.getCarrierName();
+                sim1 = carrierName0 != null ? carrierName0.toString() : "SIM";
+                sim1Id = info0.getSimSlotIndex();
+                if (info0.getNumber() != null) {
+                    sim1Num = info0.getNumber();
                     sim1Num = sim1Num.replace("+88", "").isEmpty() ? session.getData(Session.SIM1_NUMBER) : sim1Num.replace("+88", "");
                     activityMainBinding.sim1Tv.setText(sim1 + "  | No:  " + sim1Num + " | Id: " + sim1Id);
                 }
                 session.setData(Session.SIM1_ID, String.valueOf(sim1Id));
                 activityMainBinding.Sim1Layout.setVisibility(View.VISIBLE);
                 activityMainBinding.sim1Status.setVisibility(View.GONE);
-            } else {
-                sim1 = subscriptionInfoList.get(0).getCarrierName().toString();
-                sim2 = subscriptionInfoList.get(1).getCarrierName().toString();
-                sim1Id = subscriptionInfoList.get(0).getSimSlotIndex();
-                sim2Id = subscriptionInfoList.get(1).getSimSlotIndex();
+            }
 
-                if (subscriptionInfoList.get(0).getNumber() != null) {
-                    sim1Num = subscriptionInfoList.get(0).getNumber();
-                    sim2Num = subscriptionInfoList.get(1).getNumber();
+            if (subscriptionInfoList.size() >= 2) {
+                SubscriptionInfo info1 = subscriptionInfoList.get(1);
+                if (info1 != null) {
+                    CharSequence carrierName1 = info1.getCarrierName();
+                    sim2 = carrierName1 != null ? carrierName1.toString() : "SIM";
+                    sim2Id = info1.getSimSlotIndex();
 
-                    sim1Num = sim1Num.replace("+88", "").isEmpty() ? session.getData(Session.SIM1_NUMBER) : sim1Num.replace("+88", "");
+                    if (info1.getNumber() != null) {
+                        sim2Num = info1.getNumber();
+                        sim2Num = sim2Num.replace("+88", "").isEmpty() ? session.getData(Session.SIM2_NUMBER) : sim2Num.replace("+88", "");
+                        activityMainBinding.sim2Tv.setText(sim2 + "  | " + sim2Num + " | Id: " + sim2Id);
+                    }
 
-                    sim2Num = sim2Num.replace("+88", "").isEmpty() ? session.getData(Session.SIM2_NUMBER) : sim2Num.replace("+88", "");
-
-                    activityMainBinding.sim1Tv.setText(sim1 + "  | " + sim1Num + " | Id: " + sim1Id);
-                    activityMainBinding.sim2Tv.setText(sim2 + "  | " + sim2Num + " | Id: " + sim2Id);
+                    session.setData(Session.SIM2_ID, String.valueOf(sim2Id));
+                    activityMainBinding.Sim2Layout.setVisibility(View.VISIBLE);
+                    activityMainBinding.sim2Status.setVisibility(View.GONE);
                 }
-
-                session.setData(Session.SIM1_ID, String.valueOf(sim1Id));
-                session.setData(Session.SIM2_ID, String.valueOf(sim2Id));
-                activityMainBinding.Sim1Layout.setVisibility(View.VISIBLE);
-                activityMainBinding.sim1Status.setVisibility(View.GONE);
-
-                activityMainBinding.Sim2Layout.setVisibility(View.VISIBLE);
-                activityMainBinding.sim2Status.setVisibility(View.GONE);
-
-                //System.out.println("===========SYSTEM:: num:: " + sim1 + " ====SIM2 " + sim2);
             }
         }
     }
@@ -812,72 +824,101 @@ public class MainActivity extends AppCompatActivity {
         activityMainBinding.status1Sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
+                if (isSyncingSwitch) {
+                    return;
+                }
+                session.setBooleanData(Session.SIM1_ENABLED, isChecked);
                 if (isChecked) {
-                    if (savedSim1Pin != null && savedSim1Service != 0) {
-                        try {
-                            // Balance check এর অপেক্ষায় আছে এই flag set করুন
-                            // Set flag that we're waiting for balance check to complete
-                            isWaitingForBalanceCheckSim1 = true;
-                            isBalanceCheckCompleteSim1 = false;
-
-                            // Balance check শুরু করুন
-                            // Start balance check
-                            queryForSetSimWithBalance(savedSim1ServiceName, sim1Num, savedSim1Pin, sim1Id);
-
-                            // Balance check সম্পূর্ণ হলে updateSimBalanceTv method এ callback আসবে
-                            // এবং সেখানে 30 সেকেন্ড অপেক্ষা করে প্রথম request fetch করা হবে
-                            // Balance check complete callback will come in updateSimBalanceTv method
-                            // and there it will wait 30 seconds (interval time) before fetching first request
-                        } catch (Exception e) {
-                            System.out.println("======BL_EXP: " + e);
-                            isWaitingForBalanceCheckSim1 = false;
-                        }
+                    List<ServiceConfig> sim1Cfgs = session.getActiveServicesForSim(1);
+                    boolean hasConfig = !sim1Cfgs.isEmpty() || (savedSim1Pin != null && !savedSim1Pin.isEmpty() && savedSim1Service != 0);
+                    if (hasConfig) {
+                        activityMainBinding.checkBal1Btn.setEnabled(true);
+                        callGetNewPendingAfterBalanceCheck(sim1Id);
                     } else {
                         Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
                         activityMainBinding.status1Sw.setChecked(false);
-                        isWaitingForBalanceCheckSim1 = false;
                     }
                 } else {
-                    Toast.makeText(MainActivity.this, "SIM 1 USSD Service is off", Toast.LENGTH_SHORT).show();
                     isWaitingForBalanceCheckSim1 = false;
+                    activityMainBinding.checkBal1Btn.setEnabled(false);
                 }
+                refreshPowerButton();
             }
         });
 
         activityMainBinding.status2Sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
+                if (isSyncingSwitch) {
+                    return;
+                }
+                session.setBooleanData(Session.SIM2_ENABLED, isChecked);
                 if (isChecked) {
-                    if (savedSim2Pin != null && savedSim2Service != 0) {
-                        try {
-                            // Balance check এর অপেক্ষায় আছে এই flag set করুন
-                            // Set flag that we're waiting for balance check to complete
-                            isWaitingForBalanceCheckSim2 = true;
-                            isBalanceCheckCompleteSim2 = false;
-
-                            // Balance check শুরু করুন
-                            // Start balance check
-                            queryForSetSimWithBalance(savedSim2ServiceName, sim2Num, savedSim2Pin, sim2Id);
-
-                            // Balance check সম্পূর্ণ হলে updateSimBalanceTv method এ callback আসবে
-                            // এবং সেখানে 30 সেকেন্ড অপেক্ষা করে প্রথম request fetch করা হবে
-                            // Balance check complete callback will come in updateSimBalanceTv method
-                            // and there it will wait 30 seconds (interval time) before fetching first request
-                        } catch (Exception e) {
-                            System.out.println("======BL_EXP: " + e);
-                            isWaitingForBalanceCheckSim2 = false;
-                        }
+                    List<ServiceConfig> sim2Cfgs = session.getActiveServicesForSim(2);
+                    boolean hasConfig2 = !sim2Cfgs.isEmpty() || (savedSim2Pin != null && !savedSim2Pin.isEmpty() && savedSim2Service != 0);
+                    if (hasConfig2) {
+                        activityMainBinding.checkBal2Btn.setEnabled(true);
+                        callGetNewPendingAfterBalanceCheck(sim2Id);
                     } else {
                         Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
                         activityMainBinding.status2Sw.setChecked(false);
-                        isWaitingForBalanceCheckSim2 = false;
                     }
                 } else {
-                    Toast.makeText(MainActivity.this, "SIM 2 USSD Service is off", Toast.LENGTH_SHORT).show();
                     isWaitingForBalanceCheckSim2 = false;
+                    activityMainBinding.checkBal2Btn.setEnabled(false);
+                }
+                refreshPowerButton();
+            }
+        });
+
+        activityMainBinding.checkBal1Btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (!activityMainBinding.status1Sw.isChecked()) return;
+                List<ServiceConfig> sim1Cfgs = session.getActiveServicesForSim(1);
+                String balServiceName = !sim1Cfgs.isEmpty() ? sim1Cfgs.get(0).name : savedSim1ServiceName;
+                String balPin = !sim1Cfgs.isEmpty() ? sim1Cfgs.get(0).pin : savedSim1Pin;
+                boolean hasConfig = !sim1Cfgs.isEmpty() || (savedSim1Pin != null && !savedSim1Pin.isEmpty() && savedSim1Service != 0);
+                if (hasConfig) {
+                    try {
+                        isWaitingForBalanceCheckSim1 = true;
+                        queryForSetSimWithBalance(balServiceName, sim1Num, balPin, sim1Id);
+                    } catch (Exception e) {
+                        System.out.println("======BL_EXP: " + e);
+                        isWaitingForBalanceCheckSim1 = false;
+                    }
+                } else {
+                    Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
                 }
             }
         });
+
+        activityMainBinding.checkBal2Btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (!activityMainBinding.status2Sw.isChecked()) return;
+                List<ServiceConfig> sim2Cfgs = session.getActiveServicesForSim(2);
+                String balServiceName2 = !sim2Cfgs.isEmpty() ? sim2Cfgs.get(0).name : savedSim2ServiceName;
+                String balPin2 = !sim2Cfgs.isEmpty() ? sim2Cfgs.get(0).pin : savedSim2Pin;
+                boolean hasConfig2 = !sim2Cfgs.isEmpty() || (savedSim2Pin != null && !savedSim2Pin.isEmpty() && savedSim2Service != 0);
+                if (hasConfig2) {
+                    try {
+                        isWaitingForBalanceCheckSim2 = true;
+                        queryForSetSimWithBalance(balServiceName2, sim2Num, balPin2, sim2Id);
+                    } catch (Exception e) {
+                        System.out.println("======BL_EXP: " + e);
+                        isWaitingForBalanceCheckSim2 = false;
+                    }
+                } else {
+                    Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    private void refreshPowerButton() {
+        boolean anyOn = activityMainBinding.status1Sw.isChecked() || activityMainBinding.status2Sw.isChecked();
+        updatePowerButtonState(anyOn);
     }
     //endregion Settings And Service
 
@@ -927,23 +968,23 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        final String fetchKey = serviceName == null ? "" : serviceName;
         if (slotId == sim1Id) {
-            if (isFetchingPendingSim1) {
+            if (isFetchingPendingSim1.contains(fetchKey)) {
                 return;
             }
-            isFetchingPendingSim1 = true;
+            isFetchingPendingSim1.add(fetchKey);
         } else if (slotId == sim2Id) {
-            if (isFetchingPendingSim2) {
+            if (isFetchingPendingSim2.contains(fetchKey)) {
                 return;
             }
-            isFetchingPendingSim2 = true;
+            isFetchingPendingSim2.add(fetchKey);
         }
         serverRepository.fetchPendingRequests(serviceName, company, simNumber, simSlotId, simBal,
                 new ModemServerRepository.PendingRequestsCallback() {
                     @Override
                     public void onPendingRequest(ServiceRequest request) {
                         updateResultTv(slotId, "New Request: " + request.getPhone() + " TK: " + request.getAmount());
-                        String service = slotId == sim1Id ? savedSim1ServiceName : savedSim2ServiceName;
 
                         RequestData requestData = new RequestData(
                                 request.getSid(),
@@ -955,7 +996,7 @@ public class MainActivity extends AppCompatActivity {
                                 request.isPowerLoad(),
                                 slotId,
                                 simPin,
-                                service
+                                serviceName
                         );
 
                         if (slotId == sim1Id) {
@@ -969,13 +1010,7 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onServiceStopped() {
-                        if (slotId == sim1Id) {
-                            activityMainBinding.status1Sw.setChecked(false);
-                            _isWorkSim1 = false;
-                        } else if (slotId == sim2Id) {
-                            activityMainBinding.status2Sw.setChecked(false);
-                            _isWorkSim2 = false;
-                        }
+                        // Service stays ON until user manually turns it off
                     }
 
                     @Override
@@ -986,9 +1021,9 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onComplete() {
                         if (slotId == sim1Id) {
-                            isFetchingPendingSim1 = false;
+                            isFetchingPendingSim1.remove(fetchKey);
                         } else if (slotId == sim2Id) {
-                            isFetchingPendingSim2 = false;
+                            isFetchingPendingSim2.remove(fetchKey);
                         }
                     }
                 });
@@ -1043,7 +1078,6 @@ public class MainActivity extends AppCompatActivity {
         // গ্লোবাল লক সেট করুন
         // Set global lock
         isAnySimProcessing = true;
-        lastProcessedSimId = simSlotId;
 
         // প্রসেসিং ফ্ল্যাগ সেট করুন (আগে চেক করার পর)
         // Set processing flag (after checking)
@@ -1071,6 +1105,7 @@ public class MainActivity extends AppCompatActivity {
 
         // রিকোয়েস্ট প্রসেস করুন (পুরোনো রিকোয়েস্ট আগে প্রসেস হবে)
         // Process the request (older requests will be processed first)
+        scheduleSafetyTimeout(simSlotId);
         processRequest(request);
     }
 
@@ -1093,8 +1128,8 @@ public class MainActivity extends AppCompatActivity {
         if (!looksLikeBdPhone(phone)) {
             Log.e("USD_INFO", "Rejected request due to invalid phone. service=" + service
                     + ", sid=" + sid + ", phone=" + request.phone + ", amount=" + request.amount);
-            if (simSlotId == Constant.sim1Slot) sim_number = session.getData(Session.SIM1_NUMBER);
-            if (simSlotId == Constant.sim2Slot) sim_number = session.getData(Session.SIM2_NUMBER);
+            if (simSlotId == sim1Id) sim_number = session.getData(Session.SIM1_NUMBER);
+            if (simSlotId == sim2Id) sim_number = session.getData(Session.SIM2_NUMBER);
             InsertNewPopUpMessage("Invalid phone number: " + request.phone, sid, "ValidationError", sim_number, simSlotId);
             onRequestCompleted(simSlotId);
             return;
@@ -1103,8 +1138,8 @@ public class MainActivity extends AppCompatActivity {
         if (!amount.matches("\\d+(\\.\\d+)?")) {
             Log.e("USD_INFO", "Rejected request due to invalid amount. service=" + service
                     + ", sid=" + sid + ", phone=" + request.phone + ", amount=" + request.amount);
-            if (simSlotId == Constant.sim1Slot) sim_number = session.getData(Session.SIM1_NUMBER);
-            if (simSlotId == Constant.sim2Slot) sim_number = session.getData(Session.SIM2_NUMBER);
+            if (simSlotId == sim1Id) sim_number = session.getData(Session.SIM1_NUMBER);
+            if (simSlotId == sim2Id) sim_number = session.getData(Session.SIM2_NUMBER);
             InsertNewPopUpMessage("Invalid amount: " + request.amount, sid, "ValidationError", sim_number, simSlotId);
             onRequestCompleted(simSlotId);
             return;
@@ -1133,11 +1168,17 @@ public class MainActivity extends AppCompatActivity {
                 else
                     AirtelLoadSent(sid, pcode, phone, amount, type, simSlotId, simPin);
                 break;
-            case "bLink":
+            case "Banglalink":
                 if (isPowerLoad)
                     packageLoadSent("*555*", "*555*", sid, package_name, phone, amount, type, simSlotId, simPin, service);
                 else
                     BanglalinkLoadSent(sid, pcode, phone, amount, type, simSlotId, simPin);
+                break;
+            case "Skitto":
+                if (isPowerLoad)
+                    packageLoadSent("*444*", "*444*", sid, package_name, phone, amount, type, simSlotId, simPin, "Grameen");
+                else
+                    GrameenPhoneLoadSend(sid, pcode, phone, amount, type, simSlotId, simPin);
                 break;
             case "Taletalk":
                 TaletalkLoadSend(sid, pcode, phone, amount, type, simSlotId, simPin);
@@ -1196,6 +1237,7 @@ public class MainActivity extends AppCompatActivity {
     // রিকোয়েস্ট সম্পন্ন হলে কল করুন - পরবর্তী রিকোয়েস্ট প্রসেস করার জন্য
     // Call this when request is completed - to process next request
     private void onRequestCompleted(int simSlotId) {
+        cancelSafetyTimeout(simSlotId);
         // প্রসেসিং ফ্ল্যাগ রিসেট করুন
         // Reset processing flag
         if (simSlotId == sim1Id) {
@@ -1234,31 +1276,69 @@ public class MainActivity extends AppCompatActivity {
             handler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    // Status switch চেক করুন - শুধুমাত্র যদি ON থাকে তাহলে getNewPending কল করুন
-                    // Check status switch - only call getNewPending if it's ON
                     if (simSlotId == sim1Id) {
                         if (activityMainBinding.status1Sw.isChecked()) {
-                            getNewPending(savedSim1ServiceName, savedSim1ServiceCode, session.getData(Session.SIM1_NUMBER), getSim1Bal, String.valueOf(sim1Id), savedSim1Pin);
+                            fetchPendingForSim(1);
                         }
                     } else if (simSlotId == sim2Id) {
                         if (activityMainBinding.status2Sw.isChecked()) {
-                            getNewPending(savedSim2ServiceName, savedSim2ServiceCode, session.getData(Session.SIM2_NUMBER), getSim2Bal, String.valueOf(sim2Id), savedSim2Pin);
+                            fetchPendingForSim(2);
                         }
                     }
                 }
-            }, getTimerTime()); // Interval time ব্যবহার করুন (default 30 সেকেন্ড) / Use interval time (default 30 seconds)
+            }, getTimerTime());
         }
     }
 
-    private  void stopSimProgress(int simId){
-        if (simId == sim1Id) _isWorkSim1 = false;
-        if (simId == sim2Id) _isWorkSim2 = false;
+    private void scheduleSafetyTimeout(final int simSlotId) {
+        cancelSafetyTimeout(simSlotId);
+        Runnable r = new Runnable() {
+            @Override
+            public void run() {
+                Log.w("USD_QUEUE", "Safety timeout fired for SIM " + simSlotId + " - request never completed, resetting lock");
+                onRequestCompleted(simSlotId);
+            }
+        };
+        if (simSlotId == sim1Id) safetyTimeoutRunnable1 = r;
+        else safetyTimeoutRunnable2 = r;
+        handler.postDelayed(r, REQUEST_SAFETY_TIMEOUT_MS);
+    }
+
+    private void cancelSafetyTimeout(int simSlotId) {
+        if (simSlotId == sim1Id && safetyTimeoutRunnable1 != null) {
+            handler.removeCallbacks(safetyTimeoutRunnable1);
+            safetyTimeoutRunnable1 = null;
+        } else if (simSlotId == sim2Id && safetyTimeoutRunnable2 != null) {
+            handler.removeCallbacks(safetyTimeoutRunnable2);
+            safetyTimeoutRunnable2 = null;
+        }
+    }
+
+    /** Fetches pending requests for all active services on the given SIM slot (1 or 2). */
+    private void fetchPendingForSim(int simSlot) {
+        if (simSlot == 1) {
+            List<ServiceConfig> cfgs = session.getActiveServicesForSim(1);
+            if (!cfgs.isEmpty()) {
+                for (ServiceConfig cfg : cfgs) {
+                    getNewPending(cfg.name, ServiceCatalog.getCodeForService(cfg.name), cfg.number, getSim1Bal, String.valueOf(sim1Id), cfg.pin);
+                }
+            } else {
+                getNewPending(savedSim1ServiceName, savedSim1ServiceCode, session.getData(Session.SIM1_NUMBER), getSim1Bal, String.valueOf(sim1Id), savedSim1Pin);
+            }
+        } else {
+            List<ServiceConfig> cfgs = session.getActiveServicesForSim(2);
+            if (!cfgs.isEmpty()) {
+                for (ServiceConfig cfg : cfgs) {
+                    getNewPending(cfg.name, ServiceCatalog.getCodeForService(cfg.name), cfg.number, getSim2Bal, String.valueOf(sim2Id), cfg.pin);
+                }
+            } else {
+                getNewPending(savedSim2ServiceName, savedSim2ServiceCode, session.getData(Session.SIM2_NUMBER), getSim2Bal, String.valueOf(sim2Id), savedSim2Pin);
+            }
+        }
     }
 
     //region All SIM Balance Query
     private void queryForSetSimWithBalance(String savedSimServiceName, String simNumber, String simPin, int simId) {
-        if (simId == sim1Id) _isWorkSim1 = true;
-        if (simId == sim2Id) _isWorkSim2 = true;
         Log.d("USD_INFO", savedSimServiceName );
         Log.d("USD_INFO", simNumber );
         Log.d("USD_INFO", simPin );
@@ -1268,8 +1348,9 @@ public class MainActivity extends AppCompatActivity {
                 getGrameenLoadBalance(simNumber, simPin, simId);
                 break;
             case "Skitto":
-            case "bLink":
+            case "Banglalink":
                 Toast.makeText(this, savedSimServiceName + " not found balance check ussd dial code", Toast.LENGTH_SHORT).show();
+                callGetNewPendingAfterBalanceCheck(simId);
                 break;
             case "Robi":
                 getRobiEazyLoadBalance(simNumber, simPin, simId);
@@ -1307,46 +1388,36 @@ public class MainActivity extends AppCompatActivity {
             //endregion
             default:
                 Toast.makeText(this, "No ussd dial code found", Toast.LENGTH_SHORT).show();
-                stopSimProgress(simId);
+                callGetNewPendingAfterBalanceCheck(simId);
                 break;
         }
-        // Note: stopSimProgress is NOT called here globally because balance check is async
-        // Each balance check method will handle completion via callGetNewPendingAfterBalanceCheck
     }
 
 
     //endregion All SIM Balance Query
 
-    // Helper method to call getNewPending after balance check completes
-    // Balance check সম্পন্ন হওয়ার পর getNewPending কল করার helper method
     private void callGetNewPendingAfterBalanceCheck(int simId) {
-        // Status switch চেক করুন - শুধুমাত্র যদি ON থাকে তাহলে getNewPending কল করুন
-        // Check status switch - only call getNewPending if it's ON
         if (simId == sim1Id) {
             if (activityMainBinding.status1Sw.isChecked()) {
                 handler.postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        // Status switch এখনো চালু আছে কিনা এবং queue খালি আছে কিনা চেক করুন
-                        // Check if status switch is still ON and queue is empty
                         if (activityMainBinding.status1Sw.isChecked() && !isProcessingSim1 && requestQueueSim1.isEmpty()) {
-                            getNewPending(savedSim1ServiceName, savedSim1ServiceCode, session.getData(Session.SIM1_NUMBER), getSim1Bal, String.valueOf(sim1Id), savedSim1Pin);
+                            fetchPendingForSim(1);
                         }
                     }
-                }, getTimerTime()); // Interval time ব্যবহার করুন (default 30 সেকেন্ড) / Use interval time (default 30 seconds)
+                }, getTimerTime());
             }
         } else if (simId == sim2Id) {
             if (activityMainBinding.status2Sw.isChecked()) {
                 handler.postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        // Status switch এখনো চালু আছে কিনা এবং queue খালি আছে কিনা চেক করুন
-                        // Check if status switch is still ON and queue is empty
                         if (activityMainBinding.status2Sw.isChecked() && !isProcessingSim2 && requestQueueSim2.isEmpty()) {
-                            getNewPending(savedSim2ServiceName, savedSim2ServiceCode, session.getData(Session.SIM2_NUMBER), getSim2Bal, String.valueOf(sim2Id), savedSim2Pin);
+                            fetchPendingForSim(2);
                         }
                     }
-                }, getTimerTime()); // Interval time ব্যবহার করুন (default 30 সেকেন্ড) / Use interval time (default 30 seconds)
+                }, getTimerTime());
             }
         }
     }
@@ -1369,10 +1440,9 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                callGetNewPendingAfterBalanceCheck(simId);
             }
         });
-        stopSimProgress(simId);
     }
 
     private void RobiLoadSent(String sid, String pcode, String phone, String amount, String type, int simSlotId, String simPin) {
@@ -1421,10 +1491,9 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                callGetNewPendingAfterBalanceCheck(simId);
             }
         });
-        stopSimProgress(simId);
     }
 
     private void AirtelLoadSent(String sid, String pcode, String phone, String amount, String type, int simSlotId, String simPin) {
@@ -1459,10 +1528,6 @@ public class MainActivity extends AppCompatActivity {
     //endregion Airtel
 
     //region Banglalink
-    private void getBanglalinkBalance(String phoneNumber, String simPincode, int simId) {
-
-    }
-
     private void BanglalinkLoadSent(String sid, String pcode, String phone, String amount, String type, int simSlotId, String simPin) {
         String phonecodedial = "";
 
@@ -1490,7 +1555,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -1510,10 +1575,9 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                callGetNewPendingAfterBalanceCheck(simId);
             }
         });
-        stopSimProgress(simId);
     }
 
     private void GrameenPhoneLoadSend(String sid, String pcode, String phone, String amount, String type, int simSlotId, String simPin) {
@@ -1562,10 +1626,9 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                callGetNewPendingAfterBalanceCheck(simId);
             }
         });
-        stopSimProgress(simId);
     }
 
     private void TaletalkLoadSend(String sid, String pcode, String phone, String amount, String type, int simSlotId, String simPin) {
@@ -1582,7 +1645,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -1617,6 +1680,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void over(String message) {
                     Log.d("_USD_ERROR_"," Over: "+message);
+                    callGetNewPendingAfterBalanceCheck(SimID);
                 }
             });
         }
@@ -1643,11 +1707,11 @@ public class MainActivity extends AppCompatActivity {
                                                     @Override
                                                     public void responseMessage(String message) {
                                                         ussdApi.cancel();
-                                                        if (simSlotId == Constant.sim1Slot) {
+                                                        if (simSlotId == sim1Id) {
                                                             sim_number = session.getData(Session.SIM1_NUMBER);
                                                         }
 
-                                                        if (simSlotId == Constant.sim2Slot) {
+                                                        if (simSlotId == sim2Id) {
                                                             sim_number = session.getData(Session.SIM2_NUMBER);
                                                         }
                                                         InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
@@ -1668,7 +1732,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -1694,12 +1758,12 @@ public class MainActivity extends AppCompatActivity {
                                                     public void responseMessage(String message) {
 //                                                updateSimBalanceTv(Constant.getSimBalance(message), simSlotId);
                                                         ussdApi.cancel();
-                                                        if (simSlotId == Constant.sim1Slot) {
+                                                        if (simSlotId == sim1Id) {
 
                                                             sim_number = session.getData(Session.SIM1_NUMBER);
                                                         }
 
-                                                        if (simSlotId == Constant.sim2Slot) {
+                                                        if (simSlotId == sim2Id) {
                                                             sim_number = session.getData(Session.SIM2_NUMBER);
                                                         }
                                                         InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
@@ -1720,7 +1784,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -1755,10 +1819,10 @@ public class MainActivity extends AppCompatActivity {
                                                 System.out.println("====BK_STEP5: sent PIN, final response=" + message);
                                                 String cleanMessage = message == null ? "" : message.replaceAll(System.lineSeparator(), " ").trim();
                                                 ussdApi.cancel();
-                                                if (simSlotId == Constant.sim1Slot) {
+                                                if (simSlotId == sim1Id) {
                                                     sim_number = session.getData(Session.SIM1_NUMBER);
                                                 }
-                                                if (simSlotId == Constant.sim2Slot) {
+                                                if (simSlotId == sim2Id) {
                                                     sim_number = session.getData(Session.SIM2_NUMBER);
                                                 }
                                                 InsertNewPopUpMessage(cleanMessage, flexiId, "FlashMessage", sim_number, simSlotId);
@@ -1779,10 +1843,10 @@ public class MainActivity extends AppCompatActivity {
                 // USSD session ended early - send result and complete request
                 String cleanMessage = message == null ? "" : message.replaceAll(System.lineSeparator(), " ").trim();
                 if (!cleanMessage.isEmpty()) {
-                    if (simSlotId == Constant.sim1Slot) {
+                    if (simSlotId == sim1Id) {
                         sim_number = session.getData(Session.SIM1_NUMBER);
                     }
-                    if (simSlotId == Constant.sim2Slot) {
+                    if (simSlotId == sim2Id) {
                         sim_number = session.getData(Session.SIM2_NUMBER);
                     }
                     InsertNewPopUpMessage(cleanMessage, flexiId, "FlashMessage", sim_number, simSlotId);
@@ -1829,7 +1893,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void over(String message) {
-
+                    callGetNewPendingAfterBalanceCheck(SimID);
                 }
             });
         }
@@ -1854,7 +1918,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -1877,7 +1941,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -1900,6 +1964,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -1926,11 +1991,11 @@ public class MainActivity extends AppCompatActivity {
                                             });
                                         }
                                         ussdApi.cancel();
-                                        if (simSlotId == Constant.sim1Slot) {
+                                        if (simSlotId == sim1Id) {
                                             sim_number = session.getData(Session.SIM1_NUMBER);
                                         }
 
-                                        if (simSlotId == Constant.sim2Slot) {
+                                        if (simSlotId == sim2Id) {
                                             sim_number = session.getData(Session.SIM2_NUMBER);
                                         }
                                         InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
@@ -1972,11 +2037,11 @@ public class MainActivity extends AppCompatActivity {
                                                     });
                                                 }
                                                 ussdApi.cancel();
-                                                if (simSlotId == Constant.sim1Slot) {
+                                                if (simSlotId == sim1Id) {
                                                     sim_number = session.getData(Session.SIM1_NUMBER);
                                                 }
 
-                                                if (simSlotId == Constant.sim2Slot) {
+                                                if (simSlotId == sim2Id) {
                                                     sim_number = session.getData(Session.SIM2_NUMBER);
                                                 }
                                                 InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
@@ -2007,11 +2072,11 @@ public class MainActivity extends AppCompatActivity {
                                     @Override
                                     public void responseMessage(String message) {
                                         ussdApi.cancel();
-                                        if (simSlotId == Constant.sim1Slot) {
+                                        if (simSlotId == sim1Id) {
                                             sim_number = session.getData(Session.SIM1_NUMBER);
                                         }
 
-                                        if (simSlotId == Constant.sim2Slot) {
+                                        if (simSlotId == sim2Id) {
                                             sim_number = session.getData(Session.SIM2_NUMBER);
                                         }
                                         InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
@@ -2063,7 +2128,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void over(String message) {
-
+                    callGetNewPendingAfterBalanceCheck(SimID);
                 }
             });
         }
@@ -2094,14 +2159,15 @@ public class MainActivity extends AppCompatActivity {
                                                                 public void responseMessage(String message) {
 //                                                        updateSimBalanceTv(Constant.getSimBalance(message), simSlotId);
                                                                     ussdApi.cancel();
-                                                                    if (simSlotId == Constant.sim1Slot) {
+                                                                    if (simSlotId == sim1Id) {
                                                                         sim_number = session.getData(Session.SIM1_NUMBER);
                                                                     }
 
-                                                                    if (simSlotId == Constant.sim2Slot) {
+                                                                    if (simSlotId == sim2Id) {
                                                                         sim_number = session.getData(Session.SIM2_NUMBER);
                                                                     }
                                                                     InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
+                                                                    onRequestCompleted(simSlotId);
                                                                 }
                                                             });
                                                         }
@@ -2132,14 +2198,15 @@ public class MainActivity extends AppCompatActivity {
                                                         public void responseMessage(String message) {
 //                                                        updateSimBalanceTv(Constant.getSimBalance(message), simSlotId);
                                                             ussdApi.cancel();
-                                                            if (simSlotId == Constant.sim1Slot) {
+                                                            if (simSlotId == sim1Id) {
                                                                 sim_number = session.getData(Session.SIM1_NUMBER);
                                                             }
 
-                                                            if (simSlotId == Constant.sim2Slot) {
+                                                            if (simSlotId == sim2Id) {
                                                                 sim_number = session.getData(Session.SIM2_NUMBER);
                                                             }
                                                             InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
+                                                            onRequestCompleted(simSlotId);
                                                         }
                                                     });
                                                 }
@@ -2155,6 +2222,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -2181,14 +2249,15 @@ public class MainActivity extends AppCompatActivity {
                                                         public void responseMessage(String message) {
 //                                                updateSimBalanceTv(Constant.getSimBalance(message), simSlotId);
                                                             ussdApi.cancel();
-                                                            if (simSlotId == Constant.sim1Slot) {
+                                                            if (simSlotId == sim1Id) {
                                                                 sim_number = session.getData(Session.SIM1_NUMBER);
                                                             }
 
-                                                            if (simSlotId == Constant.sim2Slot) {
+                                                            if (simSlotId == sim2Id) {
                                                                 sim_number = session.getData(Session.SIM2_NUMBER);
                                                             }
                                                             InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
+                                                            onRequestCompleted(simSlotId);
                                                         }
                                                     });
                                                 }
@@ -2212,16 +2281,14 @@ public class MainActivity extends AppCompatActivity {
                                             ussdApi.send(simPin, new USSDController.CallbackMessage() {
                                                 @Override
                                                 public void responseMessage(String message) {
-//                                                updateSimBalanceTv(Constant.getSimBalance(message), simSlotId);
                                                     ussdApi.cancel();
-                                                    if (simSlotId == Constant.sim1Slot) {
+                                                    if (simSlotId == sim1Id) {
                                                         sim_number = session.getData(Session.SIM1_NUMBER);
-                                                    }
-
-                                                    if (simSlotId == Constant.sim2Slot) {
+                                                    } else if (simSlotId == sim2Id) {
                                                         sim_number = session.getData(Session.SIM2_NUMBER);
                                                     }
                                                     InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
+                                                    onRequestCompleted(simSlotId);
                                                 }
                                             });
                                         }
@@ -2231,13 +2298,11 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
                 }
-
-
             }
 
             @Override
             public void over(String message) {
-
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -2263,26 +2328,15 @@ public class MainActivity extends AppCompatActivity {
                                                     ussdApi.send(simPin, new USSDController.CallbackMessage() {
                                                         @Override
                                                         public void responseMessage(String message) {
-//                                                    updateSimBalanceTv(Constant.getSimBalance(message), simSlotId);
                                                             updateResultTv(simSlotId, message.replaceAll(System.lineSeparator(), " "));
-
-                                                            if (message.contains("LogOut")) {
-                                                                ussdApi.send("0", new USSDController.CallbackMessage() {
-                                                                    @Override
-                                                                    public void responseMessage(String message) {
-                                                                        ussdApi.cancel();
-                                                                    }
-                                                                });
-                                                            }
                                                             ussdApi.cancel();
-                                                            if (simSlotId == Constant.sim1Slot) {
+                                                            if (simSlotId == sim1Id) {
                                                                 sim_number = session.getData(Session.SIM1_NUMBER);
-                                                            }
-
-                                                            if (simSlotId == Constant.sim2Slot) {
+                                                            } else if (simSlotId == sim2Id) {
                                                                 sim_number = session.getData(Session.SIM2_NUMBER);
                                                             }
                                                             InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
+                                                            onRequestCompleted(simSlotId);
                                                         }
                                                     });
                                                 }
@@ -2306,28 +2360,15 @@ public class MainActivity extends AppCompatActivity {
                                             ussdApi.send(simPin, new USSDController.CallbackMessage() {
                                                 @Override
                                                 public void responseMessage(String message) {
-//                                                    updateSimBalanceTv(Constant.getSimBalance(message), simSlotId);
                                                     updateResultTv(simSlotId, message.replaceAll(System.lineSeparator(), " "));
-
-                                                    if (message.contains("LogOut")) {
-                                                        ussdApi.send("0", new USSDController.CallbackMessage() {
-                                                            @Override
-                                                            public void responseMessage(String message) {
-                                                                ussdApi.cancel();
-                                                            }
-                                                        });
-                                                    }
                                                     ussdApi.cancel();
-                                                    if (simSlotId == Constant.sim1Slot) {
-
+                                                    if (simSlotId == sim1Id) {
                                                         sim_number = session.getData(Session.SIM1_NUMBER);
-                                                    }
-
-                                                    if (simSlotId == Constant.sim2Slot) {
-
+                                                    } else if (simSlotId == sim2Id) {
                                                         sim_number = session.getData(Session.SIM2_NUMBER);
                                                     }
                                                     InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "FlashMessage", sim_number, simSlotId);
+                                                    onRequestCompleted(simSlotId);
                                                 }
                                             });
                                         }
@@ -2337,12 +2378,11 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
                 }
-
             }
 
             @Override
             public void over(String message) {
-
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -2400,12 +2440,12 @@ public class MainActivity extends AppCompatActivity {
                                                                 @Override
                                                                 public void responseMessage(String message) {
                                                                     ussdApi.cancel();
-                                                                    if (simSlotId == Constant.sim1Slot) {
+                                                                    if (simSlotId == sim1Id) {
                                                                         sim_number = session.getData(Session.SIM1_NUMBER);
                                                                         op = session.getData(Session.SIM1_SERVICE_NAME);
                                                                     }
 
-                                                                    if (simSlotId == Constant.sim2Slot) {
+                                                                    if (simSlotId == sim2Id) {
                                                                         sim_number = session.getData(Session.SIM2_NUMBER);
                                                                         op = session.getData(Session.SIM2_SERVICE_NAME);
                                                                     }
@@ -2429,7 +2469,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void over(String message) {
-
+                    onRequestCompleted(simSlotId);
                 }
             });
         }
@@ -2493,12 +2533,12 @@ public class MainActivity extends AppCompatActivity {
                                                                             @Override
                                                                             public void responseMessage(String message) {
                                                                                 ussdApi.cancel();
-                                                                                if (simSlotId == Constant.sim1Slot) {
+                                                                                if (simSlotId == sim1Id) {
                                                                                     sim_number = session.getData(Session.SIM1_NUMBER);
                                                                                     op = session.getData(Session.SIM1_SERVICE_NAME);
                                                                                 }
 
-                                                                                if (simSlotId == Constant.sim2Slot) {
+                                                                                if (simSlotId == sim2Id) {
                                                                                     sim_number = session.getData(Session.SIM2_NUMBER);
                                                                                     op = session.getData(Session.SIM2_SERVICE_NAME);
                                                                                 }
@@ -2540,16 +2580,17 @@ public class MainActivity extends AppCompatActivity {
                                                                     @Override
                                                                     public void responseMessage(String message) {
                                                                         ussdApi.cancel();
-                                                                        if (simSlotId == Constant.sim1Slot) {
+                                                                        if (simSlotId == sim1Id) {
                                                                             sim_number = session.getData(Session.SIM1_NUMBER);
                                                                             op = session.getData(Session.SIM1_SERVICE_NAME);
                                                                         }
 
-                                                                        if (simSlotId == Constant.sim2Slot) {
+                                                                        if (simSlotId == sim2Id) {
                                                                             sim_number = session.getData(Session.SIM2_NUMBER);
                                                                             op = session.getData(Session.SIM2_SERVICE_NAME);
                                                                         }
                                                                         InsertNewPopUpMessage(message.replaceAll(System.lineSeparator(), " "), flexiId, "NagadLoad", sim_number, simSlotId);
+                                                                        onRequestCompleted(simSlotId);
                                                                     }
                                                                 });
                                                             }
@@ -2563,12 +2604,11 @@ public class MainActivity extends AppCompatActivity {
                             }
                         });
                     }
-
                 }
 
                 @Override
                 public void over(String message) {
-
+                    onRequestCompleted(simSlotId);
                 }
             });
         }
@@ -2681,57 +2721,15 @@ public class MainActivity extends AppCompatActivity {
     }
     //endregion InsertNewPopUpMessage
 
-    //region Get Sim Number
-    private void getSimNumber(String Operator, int simSlot) {
-        String DialCode = "";
-        final String[] phoneNumber = {""};
-        switch (Operator) {
-            case "Grameen":
-            case "Robi":
-            case "Airtel":
-                DialCode = "*2#";
-                break;
-            case "bLink":
-                DialCode = "*511#";
-                break;
-            case "Taletalk":
-                DialCode = "*551#";
-                break;
-        }
-        ussdApi.callUSSDInvoke(DialCode, simSlot, map, new USSDController.CallbackInvoke() {
-            @Override
-            public void responseInvoke(String message) {
-                phoneNumber[0] = getNextWord(message, ": 88").substring(0, 11);
-
-                if (simSlot == sim1Id) {
-                    sim1Num = phoneNumber[0];
-                    session.setData(Session.SIM1_NUMBER, sim1Num);
-                    activityMainBinding.sim1Tv.setText(sim1 + "  | " + sim1Num + " | ID: " + sim1Id);
-                }
-                if (simSlot == sim2Id) {
-                    sim2Num = phoneNumber[0];
-                    session.setData(Session.SIM2_NUMBER, sim2Num);
-                    activityMainBinding.sim2Tv.setText(sim2 + "  | " + sim2Num + " | ID: " + sim2Id);
-                }
-            }
-
-            @Override
-            public void over(String message) {
-
-            }
-        });
-    }
-    //endregion Get Sim Number
-
     //region RecursiveUSSDDial
     private void packageLoadSent(String dialCodePre, String dialCodePost, String flexiId, String package_name, String phone, String amount, String type, int simSlotId, String simPin, String service) {
         System.out.println("======PKG_NAME: " + package_name);
         String phonecodedial = "";
-        if (simSlotId == Constant.sim1Slot) {
+        if (simSlotId == sim1Id) {
             sim_number = session.getData(Session.SIM1_NUMBER);
         }
 
-        if (simSlotId == Constant.sim2Slot) {
+        if (simSlotId == sim2Id) {
             sim_number = session.getData(Session.SIM2_NUMBER);
         }
 
@@ -2788,7 +2786,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-
+                onRequestCompleted(simSlotId);
             }
         });
     }
@@ -2796,11 +2794,11 @@ public class MainActivity extends AppCompatActivity {
     private void ussdSendForKey(String msgBody, String ussdMsg, String pinCode, int SimId, USSDApi ussdApis, String rechargeId, int simSlotId) {
 
         String sk = Constant.GetDialNumber(msgBody, ussdMsg);
-        if (simSlotId == Constant.sim1Slot) {
+        if (simSlotId == sim1Id) {
             sim_number = sim1Num;
         }
 
-        if (simSlotId == Constant.sim2Slot) {
+        if (simSlotId == sim2Id) {
             sim_number = sim2Num;
         }
         if (!sk.equals("")) {
@@ -2925,8 +2923,6 @@ public class MainActivity extends AppCompatActivity {
         if (simTwoExe != null) {
             simTwoExe.cancel();
         }
-        _isWorkSim1 = false;
-        _isWorkSim2 = false;
     }
 
     @Override
@@ -2941,8 +2937,6 @@ public class MainActivity extends AppCompatActivity {
         if (simTwoExe != null) {
             simTwoExe.cancel();
         }
-        _isWorkSim1 = false;
-        _isWorkSim2 = false;
     }
 
     // রিকোয়েস্ট ডাটা ক্লাস - কিউতে রাখার জন্য
