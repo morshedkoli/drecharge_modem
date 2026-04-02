@@ -382,14 +382,38 @@ public class MainActivity extends AppCompatActivity {
                 android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(stream);
                 stream.close();
                 if (bmp != null) {
+                    android.graphics.Bitmap whiteBmp = makeWhiteIcon(bmp);
+                    KeepAliveService.setLogoBitmaps(bmp, whiteBmp);
                     uiHandler.post(() -> {
                         if (!isDestroyed()) {
                             activityMainBinding.mainLogoImg.setImageBitmap(bmp);
+                            KeepAliveService.updateNotification(this);
                         }
                     });
                 }
             } catch (Exception ignored) {}
         }).start();
+    }
+
+    /**
+     * Converts every coloured pixel in the source bitmap to white while
+     * preserving its alpha — exactly what Android needs for a status-bar icon.
+     */
+    private static android.graphics.Bitmap makeWhiteIcon(android.graphics.Bitmap source) {
+        android.graphics.Bitmap result = android.graphics.Bitmap.createBitmap(
+                source.getWidth(), source.getHeight(), android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(result);
+        android.graphics.Paint paint = new android.graphics.Paint();
+        // ColorMatrix that forces R=255, G=255, B=255 and keeps original alpha unchanged
+        android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix(new float[]{
+                0, 0, 0, 0, 255,
+                0, 0, 0, 0, 255,
+                0, 0, 0, 0, 255,
+                0, 0, 0, 1,   0
+        });
+        paint.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
+        canvas.drawBitmap(source, 0, 0, paint);
+        return result;
     }
 
     private void startKeepAliveService() {

@@ -5,26 +5,67 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.os.Build;
 import android.os.IBinder;
 
 import androidx.core.app.NotificationCompat;
+import androidx.core.graphics.drawable.IconCompat;
 
 import com.dRecharge.modem.MainActivity;
 import com.dRecharge.modem.R;
 
-/**
- * Foreground service that keeps the app process alive so the USSDService
- * (AccessibilityService) is never killed by the OS or battery optimization.
- *
- * START_STICKY ensures Android restarts this service if it ever gets killed.
- * stopWithTask="false" (in manifest) keeps it alive even when the task is removed.
- */
 public class KeepAliveService extends Service {
 
     private static final String CHANNEL_ID = "drecharge_keepalive";
     static final int NOTIFICATION_ID = 1001;
+
+    /** Full-colour logo bitmap — shown as the large icon in the notification card. */
+    private static Bitmap logoColor = null;
+    /** White/alpha-only logo bitmap — used as the small status-bar icon. */
+    private static Bitmap logoWhite = null;
+
+    /** Called from MainActivity after the logo has been downloaded. */
+    public static void setLogoBitmaps(Bitmap color, Bitmap white) {
+        logoColor = color;
+        logoWhite = white;
+    }
+
+    /** Re-posts the notification with the latest logo bitmaps. */
+    public static void updateNotification(Context ctx) {
+        // We need a service instance to call startForeground; instead update via NotificationManager.
+        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) {
+            // Build a fresh notification; channel already created when service started.
+            PendingIntent openApp = PendingIntent.getActivity(
+                    ctx, 0,
+                    new Intent(ctx, MainActivity.class)
+                            .setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(ctx, CHANNEL_ID)
+                    .setContentTitle("dRecharge Running")
+                    .setContentText("USSD service is active")
+                    .setContentIntent(openApp)
+                    .setOngoing(true)
+                    .setPriority(NotificationCompat.PRIORITY_MIN)
+                    .setSilent(true);
+
+            if (logoWhite != null) {
+                builder.setSmallIcon(IconCompat.createWithBitmap(logoWhite));
+            } else {
+                builder.setSmallIcon(R.mipmap.ic_launcher);
+            }
+
+            if (logoColor != null) {
+                builder.setLargeIcon(logoColor);
+            }
+
+            nm.notify(NOTIFICATION_ID, builder.build());
+        }
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -37,11 +78,6 @@ public class KeepAliveService extends Service {
         return null;
     }
 
-    /**
-     * When the user swipes away the app from Recents, Android calls onTaskRemoved
-     * before stopping a stopWithTask="false" service. We reschedule a restart here
-     * as a safety net for devices that ignore stopWithTask.
-     */
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
@@ -63,15 +99,25 @@ public class KeepAliveService extends Service {
                         .setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("dRecharge Running")
                 .setContentText("USSD service is active")
-                .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentIntent(openApp)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_MIN)
-                .setSilent(true)
-                .build();
+                .setSilent(true);
+
+        if (logoWhite != null) {
+            builder.setSmallIcon(IconCompat.createWithBitmap(logoWhite));
+        } else {
+            builder.setSmallIcon(R.mipmap.ic_launcher);
+        }
+
+        if (logoColor != null) {
+            builder.setLargeIcon(logoColor);
+        }
+
+        return builder.build();
     }
 
     private void createChannel() {
