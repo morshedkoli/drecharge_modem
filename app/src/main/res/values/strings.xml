@@ -7,4 +7,9 @@
     <string name="robi_failed_msg">Apnar robi no-er offer dekhte dial korun</string>
     <string name="banglalink_failed_msg">Your request cannot be processed at this time</string>
     <string name="grameen_failed_msg">This service is not available</string>
+
+    <!-- Splash Screen Strings -->
+    <string name="app_name_display">dRecharge</string>
+    <string name="splash_tagline">Smart Modem Management</string>
+    <string name="splash_loading">Loading</string>
 </resources>

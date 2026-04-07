@@ -39,6 +39,27 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
+        <!-- Splash Screen (NEW LAUNCHER) -->
+        <activity
+            android:name="com.dRecharge.modem.SplashActivity"
+            android:theme="@style/SplashScreenTheme"
+            android:configChanges="orientation|keyboardHidden"
+            android:screenOrientation="portrait"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Permission Activity -->
+        <activity
+            android:name="com.dRecharge.modem.PermissionActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:configChanges="orientation|keyboardHidden"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+
         <activity
             android:name="com.dRecharge.modem.MainActivity"
             android:theme="@style/AppTheme.NoActionBar"
@@ -47,21 +68,11 @@
             android:windowSoftInputMode="stateAlwaysHidden"
             android:exported="true"
             android:turnScreenOn="true"
-            android:showWhenLocked="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:showWhenLocked="true" />
+
 
         <activity
             android:name="com.dRecharge.modem.SettingsActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
-
-        <activity
-            android:name="com.dRecharge.modem.PermissionActivity"
-            android:theme="@style/AppTheme.NoActionBar"
             android:exported="false"
             android:screenOrientation="portrait" />
 
@@ -84,6 +95,11 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name="com.dRecharge.modem.receiver.SubscriptionCheckReceiver"
+            android:enabled="true"
+            android:exported="false" />
 
         <!-- Keep-alive foreground service: keeps the process alive so the
              USSDService (AccessibilityService) is never auto-disabled by Android. -->
