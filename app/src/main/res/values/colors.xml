@@ -1,78 +1,129 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- ═══════════════════════════════════════════════════════════════
-         dRecharge Premium Soft Theme
-         Brand Emotion: Premium, Secure, and Soft
+         THEME 1: NEON DARK (Cyber Dark)
+         Modern banking + crypto style
+         Primary BG: #0B0F1A, Accent: #00D4FF (Neon Cyan)
          ═══════════════════════════════════════════════════════════════ -->
-
-    <!-- Primary Brand Colors - Deep Premium Slate/Blue -->
-    <color name="colorPrimary">#2C3E50</color>
-    <color name="colorPrimaryDark">#1A252F</color>
-    <color name="colorAccent">#82A98D</color>
-
-    <!-- Background Colors - Clean Off-White/Light Gray -->
-    <color name="bg_screen">#F8FAFB</color>
-    <color name="surface">#FFFFFF</color>
-
-    <!-- Header Gradient - Deep Premium Blues -->
-    <color name="header_start">#1A252F</color>
-    <color name="header_end">#34495E</color>
-
-    <!-- Typography Colors -->
-    <color name="text_primary">#1A252F</color>
-    <color name="text_secondary">#5D6D7E</color>
-    <color name="text_hint">#95A5A6</color>
-
-    <!-- Divider & Borders -->
-    <color name="divider">#E8ECF0</color>
-
-    <!-- Success States - Soft Sage/Mint Green -->
-    <color name="active_green">#82A98D</color>
-    <color name="active_bg">#E8F4EC</color>
-
-    <!-- Info States - Premium Blue Tint -->
-    <color name="info_text">#2C3E50</color>
-    <color name="info_bg">#EBF3F7</color>
-
-    <!-- Warning States - Soft Amber -->
-    <color name="warning_text">#8B6914</color>
-    <color name="warning_bg">#FDF6E3</color>
-
-    <!-- Error States - Soft Coral -->
-    <color name="error_text">#A94442</color>
-    <color name="error_bg">#FBEAEA</color>
-
-    <!-- Inactive/Disabled States -->
-    <color name="inactive_grey">#95A5A6</color>
-    <color name="inactive_bg">#F4F6F7</color>
-
-    <!-- Accent Colors - Soft Sage Green for CTAs -->
-    <color name="teal_primary">#82A98D</color>
-    <color name="teal_dark">#5C8A68</color>
-    <color name="teal_light">#D4E6D9</color>
-
-    <!-- Utility Colors -->
-    <color name="icon_overlay">#33FFFFFF</color>
-    <color name="danger">#C0392B</color>
-    <color name="log_text">#34495E</color>
+    <color name="neon_primary">#00D4FF</color>
+    <color name="neon_primary_dark">#00A8CC</color>
+    <color name="neon_accent">#4F46E5</color>
+    <color name="neon_bg_screen">#0B0F1A</color>
+    <color name="neon_surface">#121826</color>
+    <color name="neon_header_start">#0B0F1A</color>
+    <color name="neon_header_end">#1E293B</color>
+    <color name="neon_text_primary">#FFFFFF</color>
+    <color name="neon_text_secondary">#94A3B8</color>
+    <color name="neon_text_hint">#64748B</color>
+    <color name="neon_divider">#1E293B</color>
+    <color name="neon_active_green">#22C55E</color>
+    <color name="neon_active_bg">#0D3320</color>
+    <color name="neon_inactive_grey">#64748B</color>
+    <color name="neon_inactive_bg">#1E293B</color>
+    <color name="neon_teal_primary">#00D4FF</color>
+    <color name="neon_teal_dark">#00A8CC</color>
+    <color name="neon_teal_light">#0D3D4D</color>
+    <color name="neon_danger">#EF4444</color>
+    <color name="neon_log_text">#94A3B8</color>
+    <color name="neon_splash_start">#0B0F1A</color>
+    <color name="neon_splash_center">#121826</color>
+    <color name="neon_splash_end">#0B0F1A</color>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         Splash Screen Colors - Premium Fintech Style
+         THEME 2: BANKING GREEN (Default)
+         Trusted banking apps style (bKash/Nagad vibe)
+         Primary: #16A34A, Background: #F8FAFC
          ═══════════════════════════════════════════════════════════════ -->
-    
-    <!-- Background Gradient -->
-    <color name="splash_bg_start">#0D1B2A</color>
-    <color name="splash_bg_center">#0F1F2E</color>
-    <color name="splash_bg_end">#0A0F1C</color>
-    
-    <!-- Text Colors -->
+    <color name="green_primary">#16A34A</color>
+    <color name="green_primary_dark">#0D7A38</color>
+    <color name="green_accent">#22C55E</color>
+    <color name="green_bg_screen">#F8FAFC</color>
+    <color name="green_surface">#FFFFFF</color>
+    <color name="green_header_start">#0D7A38</color>
+    <color name="green_header_end">#16A34A</color>
+    <color name="green_text_primary">#0F172A</color>
+    <color name="green_text_secondary">#475569</color>
+    <color name="green_text_hint">#94A3B8</color>
+    <color name="green_divider">#E2E8F0</color>
+    <color name="green_active_green">#22C55E</color>
+    <color name="green_active_bg">#DCFCE7</color>
+    <color name="green_inactive_grey">#94A3B8</color>
+    <color name="green_inactive_bg">#F1F5F9</color>
+    <color name="green_teal_primary">#22C55E</color>
+    <color name="green_teal_dark">#16A34A</color>
+    <color name="green_teal_light">#DCFCE7</color>
+    <color name="green_danger">#DC2626</color>
+    <color name="green_log_text">#334155</color>
+    <color name="green_splash_start">#0D7A38</color>
+    <color name="green_splash_center">#16A34A</color>
+    <color name="green_splash_end">#0A5C2B</color>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         THEME 3: INDIGO PRO (Stripe/PayPal style)
+         Modern startup fintech style
+         Primary: #4F46E5, Background: #0F172A
+         ═══════════════════════════════════════════════════════════════ -->
+    <color name="indigo_primary">#4F46E5</color>
+    <color name="indigo_primary_dark">#3730A3</color>
+    <color name="indigo_accent">#3B82F6</color>
+    <color name="indigo_bg_screen">#0F172A</color>
+    <color name="indigo_surface">#1E293B</color>
+    <color name="indigo_header_start">#3730A3</color>
+    <color name="indigo_header_end">#4F46E5</color>
+    <color name="indigo_text_primary">#E2E8F0</color>
+    <color name="indigo_text_secondary">#94A3B8</color>
+    <color name="indigo_text_hint">#64748B</color>
+    <color name="indigo_divider">#334155</color>
+    <color name="indigo_active_green">#22C55E</color>
+    <color name="indigo_active_bg">#0D3320</color>
+    <color name="indigo_inactive_grey">#64748B</color>
+    <color name="indigo_inactive_bg">#334155</color>
+    <color name="indigo_teal_primary">#3B82F6</color>
+    <color name="indigo_teal_dark">#4F46E5</color>
+    <color name="indigo_teal_light">#1E3A5F</color>
+    <color name="indigo_danger">#EF4444</color>
+    <color name="indigo_log_text">#CBD5E1</color>
+    <color name="indigo_splash_start">#3730A3</color>
+    <color name="indigo_splash_center">#4F46E5</color>
+    <color name="indigo_splash_end">#1E1B4B</color>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         DEFAULT/CURRENT COLORS (Used by layouts - mapped by theme)
+         These are the actual colors referenced in layouts
+         ═══════════════════════════════════════════════════════════════ -->
+    <color name="colorPrimary">#16A34A</color>
+    <color name="colorPrimaryDark">#0D7A38</color>
+    <color name="colorAccent">#22C55E</color>
+    <color name="bg_screen">#F8FAFC</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="header_start">#0D7A38</color>
+    <color name="header_end">#16A34A</color>
+    <color name="text_primary">#0F172A</color>
+    <color name="text_secondary">#475569</color>
+    <color name="text_hint">#94A3B8</color>
+    <color name="divider">#E2E8F0</color>
+    <color name="active_green">#22C55E</color>
+    <color name="active_bg">#DCFCE7</color>
+    <color name="info_text">#16A34A</color>
+    <color name="info_bg">#DCFCE7</color>
+    <color name="warning_text">#8B6914</color>
+    <color name="warning_bg">#FDF6E3</color>
+    <color name="error_text">#A94442</color>
+    <color name="error_bg">#FBEAEA</color>
+    <color name="inactive_grey">#94A3B8</color>
+    <color name="inactive_bg">#F1F5F9</color>
+    <color name="teal_primary">#22C55E</color>
+    <color name="teal_dark">#16A34A</color>
+    <color name="teal_light">#DCFCE7</color>
+    <color name="icon_overlay">#33FFFFFF</color>
+    <color name="danger">#DC2626</color>
+    <color name="log_text">#334155</color>
+    <color name="splash_bg_start">#0D7A38</color>
+    <color name="splash_bg_center">#16A34A</color>
+    <color name="splash_bg_end">#0A5C2B</color>
     <color name="splash_text_primary">#FFFFFF</color>
-    <color name="splash_text_secondary">#E0E0E0</color>
-    
-    <!-- Accent Color (Cyan for fintech feel) -->
-    <color name="splash_accent">#00C2FF</color>
-    <color name="splash_accent_glow">#4D00C2FF</color>
-    
-    <!-- Alternative Fintech Green (if preferred) -->
-    <color name="splash_accent_green">#4CAF50</color>
+    <color name="splash_text_secondary">#DCFCE7</color>
+    <color name="splash_accent">#22C55E</color>
+    <color name="splash_accent_glow">#4D22C55E</color>
+    <color name="splash_accent_green">#22C55E</color>
 </resources>

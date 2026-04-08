@@ -19,6 +19,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.dRecharge.modem.helper.ThemeManager;
 import com.dRecharge.modem.ussd.USSDService;
 
 import java.util.ArrayList;
@@ -27,6 +28,8 @@ import java.util.List;
 public class PermissionActivity extends AppCompatActivity {
 
     private static final int RC_PERMISSIONS = 201;
+    private static final String PREFS_NAME = "dRechargePrefs";
+    private static final String KEY_RESTRICTED_SETTINGS_GRANTED = "restricted_settings_granted";
 
     private ImageView step1Icon, stepRestrictedIcon, step2Icon, step3Icon, step4Icon;
     private Button step1Btn, stepRestrictedBtn, step2Btn, step3Btn, step4Btn, continueBtn;
@@ -34,10 +37,10 @@ public class PermissionActivity extends AppCompatActivity {
 
     // Tracks whether user clicked the unlock button and went to Settings
     private boolean restrictedUnlockPending = false;
-    private boolean restrictedSettingsGranted = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.applyTheme(this);
         super.onCreate(savedInstanceState);
 
         if (getSupportActionBar() != null) getSupportActionBar().hide();
@@ -114,7 +117,11 @@ public class PermissionActivity extends AppCompatActivity {
         if (continueBtn != null) {
             if (restrictedUnlockPending) {
                 restrictedUnlockPending = false;
-                restrictedSettingsGranted = true;
+                // Persist the restricted settings granted state
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(KEY_RESTRICTED_SETTINGS_GRANTED, true)
+                    .apply();
             }
             updateUI();
         }
@@ -143,13 +150,13 @@ public class PermissionActivity extends AppCompatActivity {
     private void applyStepState(ImageView icon, Button btn, boolean granted) {
         if (granted) {
             icon.setImageResource(R.drawable.ic_check_circle);
-            icon.setColorFilter(Color.parseColor("#10B981"));
+            icon.setColorFilter(Color.parseColor("#22C55E"));
             btn.setText("Granted");
             btn.setEnabled(false);
             btn.setAlpha(0.5f);
         } else {
             icon.setImageResource(R.drawable.ic_pending_circle);
-            icon.setColorFilter(Color.parseColor("#9CA3AF"));
+            icon.setColorFilter(Color.parseColor("#94A3B8"));
             btn.setEnabled(true);
             btn.setAlpha(1.0f);
         }
@@ -244,10 +251,18 @@ public class PermissionActivity extends AppCompatActivity {
                 int mode = appOps.checkOpNoThrow(
                         "android:access_restricted_settings",
                         android.os.Process.myUid(), getPackageName());
-                if (mode == AppOpsManager.MODE_ALLOWED) return true;
+                if (mode == AppOpsManager.MODE_ALLOWED) {
+                    // Persist the state for reliability
+                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                        .edit()
+                        .putBoolean(KEY_RESTRICTED_SETTINGS_GRANTED, true)
+                        .apply();
+                    return true;
+                }
             } catch (Exception ignored) {}
-            // Fallback: user clicked the button and returned from Settings
-            return restrictedSettingsGranted;
+            // Fallback: check persisted state (user clicked the button and returned from Settings)
+            return getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getBoolean(KEY_RESTRICTED_SETTINGS_GRANTED, false);
         }
         return true; // Not applicable below Android 13
     }

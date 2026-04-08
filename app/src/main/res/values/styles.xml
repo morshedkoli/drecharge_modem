@@ -1,9 +1,13 @@
 <resources>
 
     <!-- ═══════════════════════════════════════════════════════════════
-         dRecharge Premium Soft Theme Styles
+         dRecharge Theme System - 3 Themes Available
+         1. Neon Dark - Modern banking + crypto style
+         2. Banking Green - Trusted banking (bKash/Nagad vibe)
+         3. Indigo Pro - Stripe/PayPal style
          ═══════════════════════════════════════════════════════════════ -->
 
+    <!-- Base Theme (Legacy - maps to Banking Green) -->
     <style name="AppTheme" parent="Theme.MaterialComponents.Light.DarkActionBar">
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
@@ -11,8 +15,108 @@
         <item name="android:windowBackground">@color/bg_screen</item>
         <item name="android:statusBarColor">@color/colorPrimaryDark</item>
         <item name="elevationOverlayEnabled">true</item>
+        <item name="actionMenuTextColor">@android:color/white</item>
+        <item name="android:actionMenuTextColor">@android:color/white</item>
+        <item name="colorControlNormal">@android:color/white</item>
+        <item name="android:textColorPrimary">@android:color/white</item>
     </style>
 
+    <!-- ═══════════════════════════════════════════════════════════════
+         THEME 1: NEON DARK - Cyber Dark Style
+         Modern banking + crypto feel with cyan accents
+         ═══════════════════════════════════════════════════════════════ -->
+    <style name="AppTheme.NeonDark" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/neon_primary</item>
+        <item name="colorPrimaryDark">@color/neon_primary_dark</item>
+        <item name="colorAccent">@color/neon_accent</item>
+        <item name="android:windowBackground">@color/neon_bg_screen</item>
+        <item name="android:statusBarColor">@color/neon_primary_dark</item>
+        <item name="elevationOverlayEnabled">true</item>
+        <item name="actionMenuTextColor">@android:color/white</item>
+        <item name="android:actionMenuTextColor">@android:color/white</item>
+        <item name="colorControlNormal">@android:color/white</item>
+        <item name="android:textColorPrimary">@android:color/white</item>
+        <!-- Material semantic colors (resolve via ?attr/ in layouts) -->
+        <item name="android:colorBackground">@color/neon_bg_screen</item>
+        <item name="colorSurface">@color/neon_surface</item>
+        <item name="colorOnSurface">@color/neon_text_primary</item>
+        <item name="colorError">@color/neon_danger</item>
+        <item name="colorSecondary">@color/neon_active_green</item>
+    </style>
+
+    <style name="AppTheme.NeonDark.NoActionBar" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/neon_primary</item>
+        <item name="colorPrimaryDark">@color/neon_primary_dark</item>
+        <item name="colorAccent">@color/neon_accent</item>
+        <item name="android:windowBackground">@color/neon_bg_screen</item>
+        <item name="android:statusBarColor">@color/neon_primary_dark</item>
+    </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         THEME 2: BANKING GREEN - bKash/Nagad Style (Default)
+         Trusted banking feel with green accents
+         ═══════════════════════════════════════════════════════════════ -->
+    <style name="AppTheme.BankingGreen" parent="Theme.MaterialComponents.Light.DarkActionBar">
+        <item name="colorPrimary">@color/green_primary</item>
+        <item name="colorPrimaryDark">@color/green_primary_dark</item>
+        <item name="colorAccent">@color/green_accent</item>
+        <item name="android:windowBackground">@color/green_bg_screen</item>
+        <item name="android:statusBarColor">@color/green_primary_dark</item>
+        <item name="elevationOverlayEnabled">true</item>
+        <item name="actionMenuTextColor">@android:color/white</item>
+        <item name="android:actionMenuTextColor">@android:color/white</item>
+        <item name="colorControlNormal">@android:color/white</item>
+        <item name="android:textColorPrimary">@android:color/white</item>
+        <!-- Material semantic colors -->
+        <item name="android:colorBackground">@color/green_bg_screen</item>
+        <item name="colorSurface">@color/green_surface</item>
+        <item name="colorOnSurface">@color/green_text_primary</item>
+        <item name="colorError">@color/green_danger</item>
+        <item name="colorSecondary">@color/green_accent</item>
+    </style>
+
+    <style name="AppTheme.BankingGreen.NoActionBar" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/green_primary</item>
+        <item name="colorPrimaryDark">@color/green_primary_dark</item>
+        <item name="colorAccent">@color/green_accent</item>
+        <item name="android:windowBackground">@color/green_bg_screen</item>
+        <item name="android:statusBarColor">@color/green_primary_dark</item>
+    </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         THEME 3: INDIGO PRO - Stripe/PayPal Style
+         Modern startup fintech with indigo gradient
+         ═══════════════════════════════════════════════════════════════ -->
+    <style name="AppTheme.IndigoPro" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/indigo_primary</item>
+        <item name="colorPrimaryDark">@color/indigo_primary_dark</item>
+        <item name="colorAccent">@color/indigo_accent</item>
+        <item name="android:windowBackground">@color/indigo_bg_screen</item>
+        <item name="android:statusBarColor">@color/indigo_primary_dark</item>
+        <item name="elevationOverlayEnabled">true</item>
+        <item name="actionMenuTextColor">@android:color/white</item>
+        <item name="android:actionMenuTextColor">@android:color/white</item>
+        <item name="colorControlNormal">@android:color/white</item>
+        <item name="android:textColorPrimary">@android:color/white</item>
+        <!-- Material semantic colors -->
+        <item name="android:colorBackground">@color/indigo_bg_screen</item>
+        <item name="colorSurface">@color/indigo_surface</item>
+        <item name="colorOnSurface">@color/indigo_text_primary</item>
+        <item name="colorError">@color/indigo_danger</item>
+        <item name="colorSecondary">@color/indigo_active_green</item>
+    </style>
+
+    <style name="AppTheme.IndigoPro.NoActionBar" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/indigo_primary</item>
+        <item name="colorPrimaryDark">@color/indigo_primary_dark</item>
+        <item name="colorAccent">@color/indigo_accent</item>
+        <item name="android:windowBackground">@color/indigo_bg_screen</item>
+        <item name="android:statusBarColor">@color/indigo_primary_dark</item>
+    </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         NoActionBar variants for activities without action bar
+         ═══════════════════════════════════════════════════════════════ -->
     <style name="AppTheme.NoActionBar" parent="Theme.MaterialComponents.Light.NoActionBar">
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
@@ -21,7 +125,9 @@
         <item name="android:statusBarColor">@color/colorPrimaryDark</item>
     </style>
 
-    <!-- Splash Screen Theme -->
+    <!-- ═══════════════════════════════════════════════════════════════
+         Splash Screen Theme (Dynamic based on theme selection)
+         ═══════════════════════════════════════════════════════════════ -->
     <style name="SplashScreenTheme" parent="Theme.MaterialComponents.NoActionBar">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>
@@ -33,6 +139,23 @@
         <item name="android:windowContentTransitions">true</item>
         <item name="android:windowEnterTransition">@android:transition/fade</item>
         <item name="android:windowExitTransition">@android:transition/fade</item>
+    </style>
+
+    <!-- Card with only top corners rounded -->
+    <style name="ShapeAppearance.TopRoundedOnly" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopLeft">16dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
+    </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Theme Selection Dialog Styles
+         ═══════════════════════════════════════════════════════════════ -->
+    <style name="ThemeDialogStyle" parent="Theme.MaterialComponents.Light.Dialog.Alert">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorAccent">@color/colorAccent</item>
     </style>
 
 </resources>

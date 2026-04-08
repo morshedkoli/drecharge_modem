@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    dRecharge notification icon — mirrors the app icon character:
+    • Bold lowercase "d" (vertical stem + semicircular bowl)
+    • Two WiFi-style signal arcs in the upper-right (like the app icon)
+    • Small accent dot below the bowl
+
+    Android notification icons must be white on transparent.
+    System tints the white to the appropriate color at runtime.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- ── "d" vertical stem ── -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M13,3 L13,21"/>
+
+    <!-- ── "d" bowl — exact semicircle curving left from stem ── -->
+    <!-- Start (13, 10.5) → CCW arc r=5 → End (13, 20.5) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M13,10.5 A5,5 0 0 0 13,20.5"/>
+
+    <!-- ── Signal arc 1 (small) — upper-right of stem ── -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M15,10 A2.2,2.2 0 0 1 17.5,8"/>
+
+    <!-- ── Signal arc 2 (larger) ── -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M15,12.5 A4.5,4.5 0 0 1 19.5,8.5"/>
+
+    <!-- ── Accent dot below "d" (mirrors the orange dot in the app icon) ── -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M8,21.5 m-1.2,0 a1.2,1.2 0 1,0 2.4,0 a1.2,1.2 0 1,0 -2.4,0"/>
+
+</vector>

@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@color/surface">
+    android:background="?attr/colorSurface">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -12,7 +12,7 @@
         android:paddingStart="14dp"
         android:paddingEnd="8dp"
         android:paddingTop="13dp"
-        android:paddingBottom="13dp"
+        android:paddingBottom="6dp"
         android:gravity="center_vertical">
 
         <!-- Service name with left accent dot -->
@@ -27,7 +27,7 @@
                 android:layout_width="6dp"
                 android:layout_height="6dp"
                 android:background="@drawable/bg_icon_btn"
-                android:backgroundTint="@color/teal_primary"
+                android:backgroundTint="?attr/colorPrimary"
                 android:layout_marginEnd="8dp"/>
 
             <TextView
@@ -36,7 +36,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:textSize="13sp"
-                android:textColor="@color/text_primary"
+                android:textColor="?attr/colorOnSurface"
                 android:textStyle="bold"
                 android:text="Service"/>
 
@@ -85,13 +85,26 @@
             android:layout_height="wrap_content"
             android:text="Edit"
             android:textSize="12sp"
-            android:textColor="@color/teal_primary"
+            android:textColor="?attr/colorPrimary"
             android:textStyle="bold"
             android:gravity="center"
             android:paddingTop="6dp"
             android:paddingBottom="6dp"/>
 
     </LinearLayout>
+
+    <!-- USSD Code display -->
+    <TextView
+        android:id="@+id/svcUssdCode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="28dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="4dp"
+        android:textSize="11sp"
+        android:textColor="@color/text_secondary"
+        android:fontFamily="monospace"
+        android:text="*444*{PHONE}*{AMOUNT}*{PIN}#"/>
 
     <!-- Schedule hint — visible only when a schedule is configured -->
     <TextView
@@ -103,7 +116,7 @@
         android:paddingEnd="14dp"
         android:paddingBottom="8dp"
         android:textSize="11sp"
-        android:textColor="@color/teal_primary"
+        android:textColor="?attr/colorPrimary"
         android:fontFamily="monospace"/>
 
     <View

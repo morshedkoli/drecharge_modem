@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/bg_screen">
+    android:background="?android:attr/colorBackground">
 
     <!-- Header -->
     <LinearLayout
@@ -56,7 +56,7 @@
                 android:layout_marginBottom="12dp"
                 app:cardCornerRadius="14dp"
                 app:cardElevation="3dp"
-                app:cardBackgroundColor="@color/surface">
+                app:cardBackgroundColor="?attr/colorSurface">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -85,7 +85,7 @@
                             android:text="App Permissions"
                             android:textSize="14sp"
                             android:textStyle="bold"
-                            android:textColor="@color/text_primary"/>
+                            android:textColor="?attr/colorOnSurface"/>
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -104,7 +104,7 @@
                         android:text="Grant"
                         android:textSize="12sp"
                         android:textColor="#FFFFFF"
-                        android:backgroundTint="@color/teal_primary"
+                        android:backgroundTint="?attr/colorPrimary"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:paddingStart="16dp"
@@ -113,79 +113,14 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Step 2: Unlock Restricted Settings (Android 13+) -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/stepRestrictedCard"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardCornerRadius="14dp"
-                app:cardElevation="3dp"
-                app:cardBackgroundColor="@color/surface">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:padding="16dp"
-                    android:gravity="center_vertical">
-
-                    <ImageView
-                        android:id="@+id/stepRestrictedIcon"
-                        android:layout_width="28dp"
-                        android:layout_height="28dp"
-                        android:src="@drawable/ic_pending_circle"
-                        android:layout_marginEnd="14dp"/>
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical"
-                        android:layout_marginEnd="12dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Unlock Restricted Settings"
-                            android:textSize="14sp"
-                            android:textStyle="bold"
-                            android:textColor="@color/text_primary"/>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Tap ⋮ menu → Allow restricted settings"
-                            android:textSize="11sp"
-                            android:textColor="@color/text_secondary"
-                            android:layout_marginTop="2dp"/>
-
-                    </LinearLayout>
-
-                    <Button
-                        android:id="@+id/stepRestrictedBtn"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:text="Unlock"
-                        android:textSize="12sp"
-                        android:textColor="#FFFFFF"
-                        android:backgroundTint="@color/teal_primary"
-                        android:insetTop="0dp"
-                        android:insetBottom="0dp"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"/>
-
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Step 3: Accessibility Service -->
+            <!-- Step 2: Accessibility Service -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 app:cardCornerRadius="14dp"
                 app:cardElevation="3dp"
-                app:cardBackgroundColor="@color/surface">
+                app:cardBackgroundColor="?attr/colorSurface">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -214,7 +149,7 @@
                             android:text="Accessibility Service"
                             android:textSize="14sp"
                             android:textStyle="bold"
-                            android:textColor="@color/text_primary"/>
+                            android:textColor="?attr/colorOnSurface"/>
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -233,7 +168,7 @@
                         android:text="Enable"
                         android:textSize="12sp"
                         android:textColor="#FFFFFF"
-                        android:backgroundTint="@color/teal_primary"
+                        android:backgroundTint="?attr/colorPrimary"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:paddingStart="16dp"
@@ -242,14 +177,79 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Step 3: Display Over Other Apps -->
+            <!-- Step 3: Unlock Restricted Settings (Android 13+) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/stepRestrictedCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="14dp"
+                app:cardElevation="3dp"
+                app:cardBackgroundColor="?attr/colorSurface">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="16dp"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:id="@+id/stepRestrictedIcon"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_pending_circle"
+                        android:layout_marginEnd="14dp"/>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginEnd="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Unlock Restricted Settings"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:textColor="?attr/colorOnSurface"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Tap ⋮ menu → Allow restricted settings"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary"
+                            android:layout_marginTop="2dp"/>
+
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/stepRestrictedBtn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="Unlock"
+                        android:textSize="12sp"
+                        android:textColor="#FFFFFF"
+                        android:backgroundTint="?attr/colorPrimary"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"/>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Step 4: Display Over Other Apps -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 app:cardCornerRadius="14dp"
                 app:cardElevation="3dp"
-                app:cardBackgroundColor="@color/surface">
+                app:cardBackgroundColor="?attr/colorSurface">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -278,7 +278,7 @@
                             android:text="Display Over Other Apps"
                             android:textSize="14sp"
                             android:textStyle="bold"
-                            android:textColor="@color/text_primary"/>
+                            android:textColor="?attr/colorOnSurface"/>
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -297,7 +297,7 @@
                         android:text="Enable"
                         android:textSize="12sp"
                         android:textColor="#FFFFFF"
-                        android:backgroundTint="@color/teal_primary"
+                        android:backgroundTint="?attr/colorPrimary"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:paddingStart="16dp"
@@ -306,14 +306,14 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Step 4: Battery Optimization -->
+            <!-- Step 5: Battery Optimization -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 app:cardCornerRadius="14dp"
                 app:cardElevation="3dp"
-                app:cardBackgroundColor="@color/surface">
+                app:cardBackgroundColor="?attr/colorSurface">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -342,7 +342,7 @@
                             android:text="Unrestricted Battery"
                             android:textSize="14sp"
                             android:textStyle="bold"
-                            android:textColor="@color/text_primary"/>
+                            android:textColor="?attr/colorOnSurface"/>
 
                         <TextView
                             android:layout_width="wrap_content"
@@ -361,7 +361,7 @@
                         android:text="Enable"
                         android:textSize="12sp"
                         android:textColor="#FFFFFF"
-                        android:backgroundTint="@color/teal_primary"
+                        android:backgroundTint="?attr/colorPrimary"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
                         android:paddingStart="16dp"
@@ -374,7 +374,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Steps 1, 2, and 3 are required. Steps 4 and 5 are strongly recommended for reliable background operation."
+                android:text="App Permissions and Accessibility are required. Restricted Settings is also required on Android 13+. Overlay and Battery settings are recommended for reliable background operation."
                 android:textSize="11sp"
                 android:textColor="@color/text_secondary"
                 android:gravity="center"
@@ -392,7 +392,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp"
-        android:background="@color/surface"
+        android:background="?attr/colorSurface"
         android:elevation="8dp">
 
         <Button
@@ -403,7 +403,7 @@
             android:textSize="16sp"
             android:textStyle="bold"
             android:textColor="#FFFFFF"
-            android:backgroundTint="@color/teal_primary"
+            android:backgroundTint="?attr/colorPrimary"
             android:enabled="false"
             android:insetTop="0dp"
             android:insetBottom="0dp"

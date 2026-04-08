@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="?attr/colorSurface"
+    android:padding="20dp">
+
+    <!-- Title -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Choose App Theme"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        android:textColor="?attr/colorOnSurface"
+        android:gravity="center"
+        android:layout_marginBottom="20dp"/>
+
+    <RadioGroup
+        android:id="@+id/themeRadioGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Theme 1: Cyber Dark -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardNeonDark"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="#0B0F1A">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="14dp">
+
+                <RadioButton
+                    android:id="@+id/rbNeonDark"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="#00D4FF"
+                    android:layout_marginEnd="12dp"/>
+
+                <!-- Color swatches -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginEnd="12dp">
+
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#0B0F1A"/>
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#00D4FF"/>
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#4F46E5"/>
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#22C55E"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Cyber Dark"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:textColor="#FFFFFF"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Modern crypto-banking with neon cyan"
+                        android:textSize="11sp"
+                        android:textColor="#94A3B8"
+                        android:layout_marginTop="2dp"/>
+                </LinearLayout>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Theme 2: Cash Green -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardBankingGreen"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="#F8FAFC">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="14dp">
+
+                <RadioButton
+                    android:id="@+id/rbBankingGreen"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="#16A34A"
+                    android:layout_marginEnd="12dp"/>
+
+                <!-- Color swatches -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginEnd="12dp">
+
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#16A34A"/>
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#22C55E"/>
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#DCFCE7"/>
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#F8FAFC"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Cash Green"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:textColor="#0F172A"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Trusted banking — bKash &amp; Nagad vibe"
+                        android:textSize="11sp"
+                        android:textColor="#475569"
+                        android:layout_marginTop="2dp"/>
+                </LinearLayout>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Theme 3: Indigo Pro -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardIndigoPro"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="#0F172A">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="14dp">
+
+                <RadioButton
+                    android:id="@+id/rbIndigoPro"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="#4F46E5"
+                    android:layout_marginEnd="12dp"/>
+
+                <!-- Color swatches -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginEnd="12dp">
+
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#4F46E5"/>
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#3B82F6"/>
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#00D4FF"/>
+                    <View
+                        android:layout_width="18dp"
+                        android:layout_height="32dp"
+                        android:background="#0F172A"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Indigo Pro"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:textColor="#E2E8F0"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Startup fintech — Stripe &amp; PayPal style"
+                        android:textSize="11sp"
+                        android:textColor="#94A3B8"
+                        android:layout_marginTop="2dp"/>
+                </LinearLayout>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </RadioGroup>
+
+    <!-- Action Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/dialogThemeCancelBtn"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:text="Cancel"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:background="@drawable/bg_btn_cancel"
+            android:layout_marginEnd="8dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"/>
+
+        <Button
+            android:id="@+id/dialogThemeApplyBtn"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:text="Apply"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_btn_confirm"
+            android:layout_marginStart="8dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"/>
+
+    </LinearLayout>
+
+</LinearLayout>

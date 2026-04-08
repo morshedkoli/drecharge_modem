@@ -15,15 +15,17 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.widget.SwitchCompat;
-
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.dRecharge.modem.helper.ServiceConfig;
 import com.dRecharge.modem.helper.Session;
+import com.dRecharge.modem.helper.ThemeManager;
 import com.dRecharge.modem.server.ServerConfig;
 
 public class SettingsActivity extends AppCompatActivity {
@@ -50,6 +52,7 @@ public class SettingsActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.applyTheme(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
 
@@ -63,11 +66,6 @@ public class SettingsActivity extends AppCompatActivity {
 
         setupDomainSection();
         buildServiceList();
-
-        findViewById(R.id.exitAppBtn).setOnClickListener(v -> {
-            finishAffinity();
-            android.os.Process.killProcess(android.os.Process.myPid());
-        });
     }
 
     private void setupDomainSection() {
@@ -83,10 +81,10 @@ public class SettingsActivity extends AppCompatActivity {
         String current = session.getData(Session.API_DOMAIN_LINK);
         if (current != null && !current.isEmpty()) {
             domainValueTv.setText(current);
-            domainValueTv.setTextColor(getResources().getColor(R.color.text_primary, getTheme()));
+            domainValueTv.setTextColor(ThemeManager.getThemeColor(this, android.R.attr.textColorPrimary));
         } else {
             domainValueTv.setText("Not configured");
-            domainValueTv.setTextColor(getResources().getColor(R.color.text_hint, getTheme()));
+            domainValueTv.setTextColor(ContextCompat.getColor(this, R.color.text_hint));
         }
     }
 
@@ -127,6 +125,7 @@ public class SettingsActivity extends AppCompatActivity {
             }
             session.setData(Session.API_DOMAIN_LINK, domain);
             session.setBooleanData(Session.IS_DOMAIN_VALIED, true);
+            session.clearSubscriptionState();
             dialog.dismiss();
             restartApp("Domain saved");
         });
@@ -156,16 +155,35 @@ public class SettingsActivity extends AppCompatActivity {
     private void showIntervalDialog() {
         View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_interval_edit, null);
 
-        EditText intervalEt  = dialogView.findViewById(R.id.dialogIntervalEt);
-        Button cancelBtn     = dialogView.findViewById(R.id.dialogIntervalCancelBtn);
-        Button saveBtn       = dialogView.findViewById(R.id.dialogIntervalSaveBtn);
+        EditText intervalEt      = dialogView.findViewById(R.id.dialogIntervalEt);
+        Button saveBtn           = dialogView.findViewById(R.id.dialogIntervalSaveBtn);
+        Button exitBtn           = dialogView.findViewById(R.id.dialogExitAppBtn);
+        RadioGroup themeGroup    = dialogView.findViewById(R.id.themeRadioGroup);
+        RadioButton rbNeonDark   = dialogView.findViewById(R.id.rbNeonDark);
+        RadioButton rbBankingGreen = dialogView.findViewById(R.id.rbBankingGreen);
+        RadioButton rbIndigoPro  = dialogView.findViewById(R.id.rbIndigoPro);
+        View cardNeonDark        = dialogView.findViewById(R.id.cardNeonDark);
+        View cardBankingGreen    = dialogView.findViewById(R.id.cardBankingGreen);
+        View cardIndigoPro       = dialogView.findViewById(R.id.cardIndigoPro);
 
-        // Show current saved value or hint with default
+        // Populate interval
         String current = session.getData(Session.TIME_INTERVAL);
         if (current != null && !current.isEmpty()) {
             intervalEt.setText(current);
             intervalEt.setSelection(current.length());
         }
+
+        // Pre-select current theme
+        switch (ThemeManager.getSelectedTheme(this)) {
+            case ThemeManager.THEME_NEON_DARK:    rbNeonDark.setChecked(true);     break;
+            case ThemeManager.THEME_INDIGO_PRO:   rbIndigoPro.setChecked(true);    break;
+            default:                              rbBankingGreen.setChecked(true); break;
+        }
+
+        // Tap anywhere on a card to select that theme
+        cardNeonDark.setOnClickListener(v -> rbNeonDark.setChecked(true));
+        cardBankingGreen.setOnClickListener(v -> rbBankingGreen.setChecked(true));
+        cardIndigoPro.setOnClickListener(v -> rbIndigoPro.setChecked(true));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(dialogView)
@@ -176,9 +194,13 @@ public class SettingsActivity extends AppCompatActivity {
             dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
 
-        cancelBtn.setOnClickListener(v -> dialog.dismiss());
+        exitBtn.setOnClickListener(v -> {
+            dialog.dismiss();
+            finishAffinity();
+        });
 
         saveBtn.setOnClickListener(v -> {
+            // Validate interval
             String input = intervalEt.getText().toString().trim();
             if (input.isEmpty()) {
                 Toast.makeText(this, "Please enter a value", Toast.LENGTH_SHORT).show();
@@ -196,8 +218,20 @@ public class SettingsActivity extends AppCompatActivity {
                 return;
             }
             session.setData(Session.TIME_INTERVAL, String.valueOf(seconds));
+
+            // Save theme
+            int selectedTheme = ThemeManager.THEME_BANKING_GREEN;
+            int checkedId = themeGroup.getCheckedRadioButtonId();
+            if (checkedId == R.id.rbNeonDark)      selectedTheme = ThemeManager.THEME_NEON_DARK;
+            else if (checkedId == R.id.rbIndigoPro) selectedTheme = ThemeManager.THEME_INDIGO_PRO;
+            boolean themeChanged = selectedTheme != ThemeManager.getSelectedTheme(this);
+            ThemeManager.setSelectedTheme(this, selectedTheme);
+
             dialog.dismiss();
-            restartApp("Interval set to " + seconds + "s");
+            String msg = themeChanged
+                    ? "Theme: " + ThemeManager.THEME_NAMES[selectedTheme] + " · Interval: " + seconds + "s"
+                    : "Interval set to " + seconds + "s";
+            restartApp(msg);
         });
 
         dialog.show();
@@ -214,10 +248,10 @@ public class SettingsActivity extends AppCompatActivity {
             TextView pinTv = row.findViewById(R.id.svcPin);
             if (cfg.pin == null || cfg.pin.isEmpty()) {
                 pinTv.setText("No PIN");
-                pinTv.setTextColor(Color.parseColor("#AAAAAA"));
+                pinTv.setTextColor(ContextCompat.getColor(this, R.color.inactive_grey));
             } else {
                 pinTv.setText("****");
-                pinTv.setTextColor(Color.parseColor("#009688"));
+                pinTv.setTextColor(ContextCompat.getColor(this, R.color.active_green));
             }
 
             ((TextView) row.findViewById(R.id.svcSim)).setText("SIM " + cfg.sim);
@@ -225,11 +259,18 @@ public class SettingsActivity extends AppCompatActivity {
             TextView statusTv = row.findViewById(R.id.svcStatus);
             if (cfg.active) {
                 statusTv.setText("Active");
-                statusTv.setTextColor(Color.parseColor("#4CAF50"));
+                statusTv.setTextColor(ContextCompat.getColor(this, R.color.active_green));
             } else {
                 statusTv.setText("Inactive");
-                statusTv.setTextColor(Color.parseColor("#AAAAAA"));
+                statusTv.setTextColor(ContextCompat.getColor(this, R.color.inactive_grey));
             }
+
+            // Display USSD code (user's custom or default)
+            TextView ussdCodeTv = row.findViewById(R.id.svcUssdCode);
+            String ussdCode = (cfg.dialCode1 != null && !cfg.dialCode1.isEmpty()) 
+                    ? cfg.dialCode1 
+                    : getDefaultDialCode1(name);
+            ussdCodeTv.setText(ussdCode);
 
             TextView scheduleTv = row.findViewById(R.id.svcSchedule);
             if (cfg.scheduleEnabled && !cfg.scheduleStart.isEmpty() && !cfg.scheduleEnd.isEmpty()) {
@@ -277,11 +318,18 @@ public class SettingsActivity extends AppCompatActivity {
         numberEt.setText(current.number);
         pinEt.setText(current.pin);
 
-        // Populate USSD codes — show stored value or use default as hint
-        dialCode1Et.setHint(getDefaultDialCode1(name));
-        dialCode0Et.setHint(getDefaultDialCode0(name));
-        dialCode1Et.setText(current.dialCode1);
-        dialCode0Et.setText(current.dialCode0);
+        String defaultCode1 = getDefaultDialCode1(name);
+        String defaultCode0 = getDefaultDialCode0(name);
+
+        dialCode1Et.setHint(defaultCode1);
+        dialCode0Et.setHint(defaultCode0.isEmpty() ? "(same as Type 1 if blank)" : defaultCode0);
+
+        dialCode1Et.setText(current.dialCode1 != null && !current.dialCode1.isEmpty() ? current.dialCode1 : defaultCode1);
+        if (current.dialCode0 != null && !current.dialCode0.isEmpty()) {
+            dialCode0Et.setText(current.dialCode0);
+        } else {
+            dialCode0Et.setText(defaultCode0);
+        }
 
         // Schedule
         scheduleSw.setChecked(current.scheduleEnabled);
@@ -339,14 +387,14 @@ public class SettingsActivity extends AppCompatActivity {
             case "Airtel":            return "*444*1*{PHONE}*{AMOUNT}*{PIN}#";
             case "Banglalink":        return "*555*{PHONE}*{AMOUNT}*0*{PIN}#";
             case "Taletalk":          return "*250*{PHONE}*{AMOUNT}*{PIN}#";
-            case "bKash-Load":
-            case "bKash-Agent-SIM":
-            case "bKash-Personal-SIM": return "*247#  (initial code — menu steps are fixed)";
-            case "Roket-Agent-SIM":
-            case "Roket-Personal-SIM": return "*322#  (initial code — menu steps are fixed)";
-            case "Nagad-Load":
-            case "Nagad-Agent-SIM":
-            case "Nagad-Personal-SIM": return "*167#  (initial code — menu steps are fixed)";
+            case "bKash-Load":        return "*247*1*{PHONE}*{AMOUNT}*{PIN}#";
+            case "bKash-Agent-SIM":   return "*247*2*{PHONE}*{AMOUNT}*{PIN}#";
+            case "bKash-Personal-SIM": return "*247*1*{PHONE}*{AMOUNT}*{PIN}#";
+            case "Roket-Agent-SIM":   return "*322*2*{PHONE}*{AMOUNT}*{PIN}#";
+            case "Roket-Personal-SIM": return "*322*1*{PHONE}*{AMOUNT}*{PIN}#";
+            case "Nagad-Load":        return "*167*1*{PHONE}*{AMOUNT}*{PIN}#";
+            case "Nagad-Agent-SIM":   return "*167*2*{PHONE}*{AMOUNT}*{PIN}#";
+            case "Nagad-Personal-SIM": return "*167*1*{PHONE}*{AMOUNT}*{PIN}#";
             default:                  return "{PHONE}*{AMOUNT}*{PIN}#";
         }
     }
@@ -381,7 +429,7 @@ public class SettingsActivity extends AppCompatActivity {
             Intent intent = new Intent(getApplicationContext(), MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
-            android.os.Process.killProcess(android.os.Process.myPid());
+            finishAffinity();
         }, 700);
     }
 
@@ -391,7 +439,7 @@ public class SettingsActivity extends AppCompatActivity {
             case "Robi":       return "*8383*3*{PHONE}*{AMOUNT}*{PIN}#";
             case "Airtel":     return "*444*10*{PHONE}*{AMOUNT}*{PIN}#";
             case "Banglalink": return "*566*{PHONE}*{AMOUNT}*{PIN}#";
-            default:           return "(same as Type 1 if blank)";
+            default:           return "";
         }
     }
 }

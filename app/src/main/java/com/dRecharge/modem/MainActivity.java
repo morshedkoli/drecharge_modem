@@ -1,7 +1,11 @@
 package com.dRecharge.modem;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationCompat;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
@@ -12,7 +16,10 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -39,11 +46,20 @@ import com.dRecharge.modem.helper.Constant;
 import com.dRecharge.modem.helper.ServiceCatalog;
 import com.dRecharge.modem.helper.ServiceConfig;
 import com.dRecharge.modem.helper.Session;
+import com.dRecharge.modem.helper.ThemeManager;
+import com.dRecharge.modem.licenseapimodel.DomainSubscriptionStatus;
+import com.dRecharge.modem.licenseapimodel.SingleDomainResponse;
 import com.dRecharge.modem.receiver.SMSBReceiver;
 import com.dRecharge.modem.server.ModemServerRepository;
 import com.dRecharge.modem.server.ServerConfig;
 import com.dRecharge.modem.service.KeepAliveService;
 import com.dRecharge.modem.service.ServiceRequest;
+import com.dRecharge.modem.subscription.SubscriptionAccessPolicy;
+import com.dRecharge.modem.subscription.SubscriptionCheckScheduler;
+import com.dRecharge.modem.subscription.SubscriptionCheckSupport;
+import com.dRecharge.modem.subscription.SubscriptionLogoStore;
+import com.dRecharge.modem.subscription.SubscriptionRepository;
+import com.dRecharge.modem.subscription.SubscriptionStatusEvaluator;
 import com.dRecharge.modem.ussd.USSDApi;
 import com.dRecharge.modem.ussd.USSDController;
 import com.dRecharge.modem.ussd.USSDService;
@@ -95,8 +111,13 @@ import static com.dRecharge.modem.helper.Constant.sim2Id;
 import static com.dRecharge.modem.helper.Constant.sim2Num;
 import static com.dRecharge.modem.helper.Session.SIM1_SERVICE_CODE;
 import static com.dRecharge.modem.helper.Session.SIM2_SERVICE_CODE;
+import static com.dRecharge.modem.helper.Session.SUBSCRIPTION_CHECKED_AT;
+import static com.dRecharge.modem.helper.Session.SUBSCRIPTION_DAYS_UNTIL_EXPIRY;
+import static com.dRecharge.modem.helper.Session.SUBSCRIPTION_TRACKED;
 
 public class MainActivity extends AppCompatActivity {
+    private static final String DEFAULT_HOME_TITLE = "dRecharge";
+    private static final String DEFAULT_HOME_SUBTITLE = "Modem Service";
     private ActivityMainBinding activityMainBinding;
     private HashMap<String, HashSet<String>> map;
     private Session session;
@@ -110,6 +131,12 @@ public class MainActivity extends AppCompatActivity {
     public static Context contextOfApplication;
     private USSDApi ussdApi;
     private ModemServerRepository serverRepository;
+    private SubscriptionRepository subscriptionRepository;
+    private boolean isSubscriptionValid = false;
+    private boolean isSubscriptionCheckInProgress = false;
+    private static final String SUBSCRIPTION_ALERT_CHANNEL_ID = "drecharge_subscription_alerts";
+    private static final int SUBSCRIPTION_ALERT_NOTIFICATION_ID = 1002;
+    private String lastSubscriptionAlertMessage = "";
 
     // রিকোয়েস্ট কিউ সিস্টেম - প্রতিটি SIM এর জন্য আলাদা কিউ
     // Request Queue System - Separate queue for each SIM
@@ -145,15 +172,34 @@ public class MainActivity extends AppCompatActivity {
 
     // ── Countdown ──
     private final android.os.Handler countdownHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final android.os.Handler subscriptionCheckHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private long nextFetchAtMs = 0;
+    private final Runnable dailySubscriptionCheckRunnable = new Runnable() {
+        @Override
+        public void run() {
+            refreshSubscriptionState(false);
+            scheduleNextInAppSubscriptionCheck();
+        }
+    };
     private final Runnable countdownRunnable = new Runnable() {
         @Override
         public void run() {
-            if (activityMainBinding != null && nextFetchAtMs > 0) {
+            if (activityMainBinding == null) {
+                return;
+            }
+
+            if (!isAnyServiceEnabled()) {
+                stopCountdown();
+                return;
+            }
+
+            if (nextFetchAtMs > 0) {
                 long remainMs = Math.max(0, nextFetchAtMs - System.currentTimeMillis());
                 int secs = (int) (remainMs / 1000);
                 String display = String.format(java.util.Locale.US, "Next: %02d:%02d", secs / 60, secs % 60);
                 activityMainBinding.countdownTv.setText(display);
+            } else {
+                activityMainBinding.countdownTv.setText("Next: 00:00");
             }
             countdownHandler.postDelayed(this, 500);
         }
@@ -161,6 +207,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeManager.applyTheme(this);
         super.onCreate(savedInstanceState);
 
         if (getSupportActionBar() != null) getSupportActionBar().hide();
@@ -171,9 +218,12 @@ public class MainActivity extends AppCompatActivity {
         session = new Session(MainActivity.this);
         loadingDialog = new LoadingDialog(MainActivity.this);
         ussdApi = USSDController.getInstance(contextOfApplication);
+        subscriptionRepository = new SubscriptionRepository();
 
         activityMainBinding.homeSettingsBtn.setOnClickListener(v -> openSettingsScreen());
         activityMainBinding.powerBtn.setOnClickListener(v -> toggleService());
+        activityMainBinding.subscriptionRefreshBtn.setOnClickListener(v -> refreshSubscriptionState(true));
+        SubscriptionCheckScheduler.scheduleNextDailyCheck(this);
 
         updatePowerButtonState(false);
 
@@ -184,8 +234,11 @@ public class MainActivity extends AppCompatActivity {
         }
 
         startKeepAliveService();
+        loadHeaderBranding();
         loadLogo();
 
+        refreshSubscriptionState(false);
+        scheduleNextInAppSubscriptionCheck();
         getsSimServiceInfo();
         init();
         simServiceSelect();
@@ -204,9 +257,18 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         if (activityMainBinding != null && session != null) {
             refreshServerRepository();
+            SubscriptionCheckScheduler.scheduleNextDailyCheck(this);
+            refreshSubscriptionState(false);
+            scheduleNextInAppSubscriptionCheck();
             getsSimServiceInfo();
             reloadHomeFromSession();
         }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        subscriptionCheckHandler.removeCallbacks(dailySubscriptionCheckRunnable);
     }
 
     private TimerTask screenOn() {
@@ -240,12 +302,40 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updatePowerButtonState(boolean isOn) {
-        activityMainBinding.powerBtn.setColorFilter(isOn ? Color.parseColor("#4CAF50") : Color.parseColor("#F44336"));
+        activityMainBinding.powerBtn.setColorFilter(isOn ? Color.parseColor("#22C55E") : Color.parseColor("#DC2626"));
+    }
+
+    private boolean isAnyServiceEnabled() {
+        return activityMainBinding != null
+                && (activityMainBinding.status1Sw.isChecked() || activityMainBinding.status2Sw.isChecked());
+    }
+
+    private void scheduleCountdown(long delayMs) {
+        nextFetchAtMs = System.currentTimeMillis() + Math.max(0, delayMs);
+        refreshCountdownState();
+    }
+
+    private void refreshCountdownState() {
+        countdownHandler.removeCallbacks(countdownRunnable);
+        if (isAnyServiceEnabled()) {
+            countdownHandler.post(countdownRunnable);
+        } else {
+            stopCountdown();
+        }
+    }
+
+    private void stopCountdown() {
+        nextFetchAtMs = 0;
+        countdownHandler.removeCallbacks(countdownRunnable);
+        if (activityMainBinding != null) {
+            activityMainBinding.countdownTv.setText("Next: 00:00");
+        }
     }
 
     private void reloadHomeFromSession() {
         updateSimConfigurationSummary();
         syncEnabledSwitchesFromSession();
+        renderSubscriptionStatusFromSession();
     }
 
     private void updateSimConfigurationSummary() {
@@ -353,46 +443,53 @@ public class MainActivity extends AppCompatActivity {
                 return false;
             }
             // Check restricted settings unlocked (required before accessibility on API 33+)
+            if (!isRestrictedSettingsUnlocked()) {
+                return false;
+            }
+        }
+        // Check accessibility service
+        return isAccessServiceEnabled(getApplicationContext(), USSDService.class);
+    }
+
+    private boolean isRestrictedSettingsUnlocked() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Try the AppOps check first (works on stock Android)
             try {
                 android.app.AppOpsManager appOps =
                     (android.app.AppOpsManager) getSystemService(APP_OPS_SERVICE);
                 int mode = appOps.checkOpNoThrow(
                         "android:access_restricted_settings",
                         android.os.Process.myUid(), getPackageName());
-                if (mode != android.app.AppOpsManager.MODE_ALLOWED) return false;
-            } catch (Exception ignored) {}
-        }
-        // Check accessibility service
-        return isAccessServiceEnabled(getApplicationContext(), USSDService.class);
-    }
-
-    private static final String LOGO_URL = "https://drecharge.com/drm.png";
-
-    private void loadLogo() {
-        android.os.Handler uiHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-        new Thread(() -> {
-            try {
-                java.net.HttpURLConnection conn =
-                        (java.net.HttpURLConnection) new java.net.URL(LOGO_URL).openConnection();
-                conn.setDoInput(true);
-                conn.setConnectTimeout(8000);
-                conn.setReadTimeout(8000);
-                conn.connect();
-                java.io.InputStream stream = conn.getInputStream();
-                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(stream);
-                stream.close();
-                if (bmp != null) {
-                    android.graphics.Bitmap whiteBmp = makeWhiteIcon(bmp);
-                    KeepAliveService.setLogoBitmaps(bmp, whiteBmp);
-                    uiHandler.post(() -> {
-                        if (!isDestroyed()) {
-                            activityMainBinding.mainLogoImg.setImageBitmap(bmp);
-                            KeepAliveService.updateNotification(this);
-                        }
-                    });
+                if (mode == android.app.AppOpsManager.MODE_ALLOWED) {
+                    return true;
                 }
             } catch (Exception ignored) {}
-        }).start();
+            // Fallback: check persisted state from PermissionActivity
+            return getSharedPreferences("dRechargePrefs", MODE_PRIVATE)
+                .getBoolean("restricted_settings_granted", false);
+        }
+        return true; // Not applicable below Android 13
+    }
+
+    private void loadLogo() {
+        String logoName = getActiveSubscriptionLogoName();
+        if (logoName.isEmpty()) {
+            applyDefaultLogo();
+            return;
+        }
+
+        Bitmap cachedLogo = SubscriptionLogoStore.loadCachedLogo(this, logoName);
+        if (cachedLogo != null) {
+            applyLogoBitmaps(cachedLogo);
+            return;
+        }
+
+        applyDefaultLogo();
+        syncSubscriptionLogo(logoName);
+    }
+
+    private void loadHeaderBranding() {
+        applyHeaderBranding(getActiveSubscriptionDisplayName());
     }
 
     /**
@@ -414,6 +511,94 @@ public class MainActivity extends AppCompatActivity {
         paint.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
         canvas.drawBitmap(source, 0, 0, paint);
         return result;
+    }
+
+    private void applyDefaultLogo() {
+        applyLogoBitmaps(null);
+    }
+
+    private void applyDefaultHeaderBranding() {
+        if (activityMainBinding == null) {
+            return;
+        }
+
+        activityMainBinding.homeTitleTv.setText(DEFAULT_HOME_TITLE);
+    }
+
+    private void applyHeaderBranding(String displayName) {
+        if (activityMainBinding == null) {
+            return;
+        }
+
+        String trimmed = displayName == null ? "" : displayName.trim();
+        if (trimmed.isEmpty()) {
+            applyDefaultHeaderBranding();
+            return;
+        }
+
+        activityMainBinding.homeTitleTv.setText(trimmed);
+    }
+
+    private void applyLogoBitmaps(Bitmap homeLogoBitmap) {
+        if (activityMainBinding != null) {
+            if (homeLogoBitmap != null) {
+                activityMainBinding.mainLogoImg.setVisibility(View.VISIBLE);
+                activityMainBinding.mainLogoFallbackTv.setVisibility(View.GONE);
+                activityMainBinding.mainLogoImg.setImageBitmap(homeLogoBitmap);
+            } else {
+                activityMainBinding.mainLogoImg.setImageDrawable(null);
+                activityMainBinding.mainLogoImg.setVisibility(View.GONE);
+                activityMainBinding.mainLogoFallbackTv.setVisibility(View.VISIBLE);
+            }
+        }
+
+        Bitmap squareBmp = BitmapFactory.decodeResource(getResources(), R.drawable.app_logo_square);
+        Bitmap whiteBmp = squareBmp == null ? null : makeWhiteIcon(squareBmp);
+        Bitmap notificationLogo = homeLogoBitmap != null ? homeLogoBitmap : squareBmp;
+        KeepAliveService.setLogoBitmaps(notificationLogo, whiteBmp);
+        KeepAliveService.updateNotification(this);
+    }
+
+    private String getActiveSubscriptionLogoName() {
+        if (session == null) {
+            return "";
+        }
+
+        String host = extractDomainHost(session.getData(Session.API_DOMAIN_LINK));
+        String lastCheckedDomain = session.getData(Session.SUBSCRIPTION_LAST_DOMAIN);
+        if (host.isEmpty() || !host.equals(lastCheckedDomain)) {
+            return "";
+        }
+
+        return session.getData(Session.SUBSCRIPTION_DOMAIN_LOGO).trim();
+    }
+
+    private String getActiveSubscriptionDisplayName() {
+        if (session == null) {
+            return "";
+        }
+
+        String host = extractDomainHost(session.getData(Session.API_DOMAIN_LINK));
+        String lastCheckedDomain = session.getData(Session.SUBSCRIPTION_LAST_DOMAIN);
+        if (host.isEmpty() || !host.equals(lastCheckedDomain)) {
+            return "";
+        }
+
+        return session.getData(Session.SUBSCRIPTION_DISPLAY_NAME).trim();
+    }
+
+    private void syncSubscriptionLogo(String logoName) {
+        SubscriptionLogoStore.syncLogoAsync(this, logoName, bitmap -> runOnUiThread(() -> {
+            if (isFinishing() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed())) {
+                return;
+            }
+
+            if (bitmap != null) {
+                applyLogoBitmaps(bitmap);
+            } else {
+                applyDefaultLogo();
+            }
+        }));
     }
 
     private void startKeepAliveService() {
@@ -471,6 +656,7 @@ public class MainActivity extends AppCompatActivity {
         if (normalizedDomain.isEmpty()) {
             serverRepository = null;
             API_SAVED_DOMAIN_LINK = "";
+            isSubscriptionValid = false;
             return;
         }
 
@@ -480,6 +666,628 @@ public class MainActivity extends AppCompatActivity {
 
         API_SAVED_DOMAIN_LINK = normalizedDomain;
         serverRepository = ModemServerRepository.fromDomain(normalizedDomain);
+    }
+
+    private void refreshSubscriptionState(boolean forceRefresh) {
+        String normalizedDomain = ServerConfig.sanitizeDomain(session.getData(Session.API_DOMAIN_LINK));
+        String host = extractDomainHost(normalizedDomain);
+
+        if (host.isEmpty()) {
+            isSubscriptionValid = false;
+            session.clearSubscriptionState();
+            loadHeaderBranding();
+            loadLogo();
+            renderSubscriptionStatusFromSession();
+            return;
+        }
+
+        String lastCheckedDomain = session.getData(Session.SUBSCRIPTION_LAST_DOMAIN);
+        if (!host.equals(lastCheckedDomain)) {
+            session.clearSubscriptionState();
+            loadHeaderBranding();
+            loadLogo();
+        }
+
+        boolean hasCurrentCheck = isSubscriptionCheckCurrent(host);
+        renderSubscriptionStatusFromSession();
+
+        if (!forceRefresh && hasCurrentCheck) {
+            isSubscriptionValid = canProcessRequests();
+            return;
+        }
+
+        if (isSubscriptionCheckInProgress) {
+            return;
+        }
+
+        isSubscriptionCheckInProgress = true;
+        renderSubscriptionCheckingState(host);
+
+        subscriptionRepository.checkDomain(host, new SubscriptionRepository.SubscriptionCallback() {
+            @Override
+            public void onSuccess(SingleDomainResponse response) {
+                isSubscriptionCheckInProgress = false;
+                storeSubscriptionState(host, response);
+                renderSubscriptionStatusFromSession();
+            }
+
+            @Override
+            public void onFailure(Throwable throwable) {
+                isSubscriptionCheckInProgress = false;
+                isSubscriptionValid = false;
+                String failureMessage = defaultIfEmpty(throwable == null ? "" : throwable.getMessage(),
+                        "Subscription check failed");
+                renderSubscriptionFailureState(host, failureMessage);
+                Log.e("USD_SUBSCRIPTION", "Subscription check failed", throwable);
+            }
+        });
+    }
+
+    private void storeSubscriptionState(String host, SingleDomainResponse response) {
+        DomainSubscriptionStatus resolved = response == null ? null : response.resolveData();
+        if (resolved == null || !SubscriptionCheckSupport.storeSubscriptionState(session, host, response)) {
+            return;
+        }
+
+        applyHeaderBranding(resolved.getDisplayName());
+        syncSubscriptionLogo(resolved.getDomainLogo());
+
+        SubscriptionStatusEvaluator.Evaluation evaluation = syncSubscriptionEvaluation();
+        isSubscriptionValid = canProcessRequests(evaluation);
+        if (!isSubscriptionValid) {
+            disableRequestProcessing();
+        }
+    }
+
+    private void renderSubscriptionStatusFromSession() {
+        if (activityMainBinding == null || session == null) {
+            return;
+        }
+
+        String host = extractDomainHost(session.getData(Session.API_DOMAIN_LINK));
+        if (host.isEmpty()) {
+            renderSubscriptionSetupState();
+            isSubscriptionValid = false;
+            return;
+        }
+
+        boolean tracked = session.getBooleanData(SUBSCRIPTION_TRACKED);
+        boolean available = session.getBooleanData(Session.SUBSCRIPTION_AVAILABLE);
+        boolean subscribed = session.getBooleanData(Session.SUBSCRIPTION_SUBSCRIBED);
+        String subscriptionStatus = session.getData(Session.SUBSCRIPTION_STATUS);
+        String subscriptionMessage = session.getData(Session.SUBSCRIPTION_MESSAGE);
+        SubscriptionStatusEvaluator.Evaluation evaluation = syncSubscriptionEvaluation();
+        Integer serverDaysUntilExpiry = getStoredDaysUntilExpiry();
+
+        if (isSubscriptionCheckInProgress || !isSubscriptionCheckCurrent(host)) {
+            renderSubscriptionCheckingState(host);
+            isSubscriptionValid = false;
+            return;
+        }
+
+        if (SubscriptionAccessPolicy.isExpired(evaluation, subscriptionStatus, subscriptionMessage)) {
+            String expiredMessage = buildExpiredSubscriptionMessage(host, subscriptionStatus, evaluation);
+            renderSubscriptionExpiredState(host, subscriptionStatus, evaluation);
+            isSubscriptionValid = false;
+            disableRequestProcessing();
+            showSubscriptionExpiredNotification(expiredMessage);
+            return;
+        }
+
+        clearSubscriptionExpiredNotification();
+        if (shouldRenderInactiveSubscriptionState(tracked, available, subscribed, subscriptionStatus, subscriptionMessage)) {
+            renderSubscriptionInactiveState(host, subscriptionStatus, subscriptionMessage);
+            isSubscriptionValid = canProcessRequests(evaluation);
+            return;
+        }
+
+        renderSubscriptionActiveState(host, subscriptionStatus, subscriptionMessage, serverDaysUntilExpiry, evaluation);
+
+        isSubscriptionValid = true;
+    }
+
+    private void renderSubscriptionSetupState() {
+        updateSubscriptionRefreshState(false);
+        renderSubscriptionBadge(
+                "SETUP",
+                ContextCompat.getColor(this, R.color.inactive_bg),
+                ContextCompat.getColor(this, R.color.inactive_grey),
+                "Add server domain",
+                "Subscription check is disabled");
+    }
+
+    private void renderSubscriptionCheckingState(String host) {
+        updateSubscriptionRefreshState(false);
+        renderSubscriptionBadge(
+                "CHECKING",
+                ContextCompat.getColor(this, R.color.info_bg),
+                ContextCompat.getColor(this, R.color.info_text),
+                "Verifying subscription",
+                host);
+    }
+
+    private void renderSubscriptionFailureState(String host, String failureMessage) {
+        updateSubscriptionRefreshState(true);
+        String cleanMessage = singleLine(failureMessage);
+        renderSubscriptionBadge(
+                "ERROR",
+                ContextCompat.getColor(this, R.color.error_bg),
+                ContextCompat.getColor(this, R.color.error_text),
+                "Subscription check failed",
+                joinSubscriptionMeta(host, cleanMessage));
+    }
+
+    private void renderSubscriptionExpiredState(String host,
+                                                String status,
+                                                SubscriptionStatusEvaluator.Evaluation evaluation) {
+        updateSubscriptionRefreshState(true);
+        String expiryLabel = evaluation.getDisplayDate();
+        String detail = expiryLabel.isEmpty() ? "Subscription expired" : "Expired on " + expiryLabel;
+        renderSubscriptionBadge(
+                "EXPIRED",
+                R.color.error_bg,
+                R.color.error_text,
+                detail,
+                joinSubscriptionMeta(host, formatSubscriptionStatus(status)));
+    }
+
+    private void renderSubscriptionActiveState(String host,
+                                               String status,
+                                               String message,
+                                               Integer serverDaysUntilExpiry,
+                                               SubscriptionStatusEvaluator.Evaluation evaluation) {
+        updateSubscriptionRefreshState(true);
+        String expiryLabel = evaluation.getDisplayDate();
+        String detail = "Subscription active";
+        String meta = host;
+
+        if (evaluation.expiresToday()) {
+            detail = "Expires today";
+            meta = joinSubscriptionMeta(host, expiryLabel.isEmpty() ? "" : "Expiry " + expiryLabel);
+        } else if (serverDaysUntilExpiry != null && serverDaysUntilExpiry >= 0) {
+            detail = serverDaysUntilExpiry + " day" + (serverDaysUntilExpiry == 1 ? "" : "s") + " left";
+            meta = joinSubscriptionMeta(host, expiryLabel.isEmpty() ? "" : "Expires " + expiryLabel);
+        } else if (evaluation.getDaysLeft() >= 0) {
+            long daysLeft = evaluation.getDaysLeft();
+            detail = daysLeft + " day" + (daysLeft == 1 ? "" : "s") + " left";
+            meta = joinSubscriptionMeta(host, expiryLabel.isEmpty() ? "" : "Expires " + expiryLabel);
+        } else if (evaluation.hasKnownExpiry() && !expiryLabel.isEmpty()) {
+            detail = "Active until " + expiryLabel;
+        } else if (!formatSubscriptionStatus(status).isEmpty()) {
+            meta = joinSubscriptionMeta(host, formatSubscriptionStatus(status));
+        } else if (!singleLine(message).isEmpty()) {
+            meta = joinSubscriptionMeta(host, singleLine(message));
+        }
+
+        renderSubscriptionBadge(
+                "ACTIVE",
+                ContextCompat.getColor(this, R.color.active_bg),
+                ContextCompat.getColor(this, R.color.active_green),
+                detail,
+                meta);
+    }
+
+    private void renderSubscriptionInactiveState(String host, String status, String message) {
+        updateSubscriptionRefreshState(true);
+        String normalizedStatus = normalizeSubscriptionText(status);
+        String normalizedMessage = normalizeSubscriptionText(message);
+        String badge = "INACTIVE";
+        int badgeBackgroundColor = ContextCompat.getColor(this, R.color.inactive_bg);
+        int badgeTextColor = ContextCompat.getColor(this, R.color.inactive_grey);
+        String detail = "Subscription inactive";
+
+        if (isDomainNotFoundStatus(normalizedStatus, normalizedMessage)) {
+            badge = "UNAVAILABLE";
+            detail = "Domain not found";
+        } else if (normalizedStatus.contains("pending") || normalizedMessage.contains("pending")) {
+            badge = "PENDING";
+            badgeBackgroundColor = ContextCompat.getColor(this, R.color.warning_bg);
+            badgeTextColor = ContextCompat.getColor(this, R.color.warning_text);
+            detail = "Awaiting activation";
+        } else if (!singleLine(message).isEmpty()) {
+            detail = singleLine(message);
+        }
+
+        String formattedStatus = formatSubscriptionStatus(status);
+        String meta = joinSubscriptionMeta(host, formattedStatus);
+        if (formattedStatus.isEmpty() && !singleLine(message).equals(detail)) {
+            meta = joinSubscriptionMeta(host, singleLine(message));
+        }
+
+        renderSubscriptionBadge(
+                badge,
+                badgeBackgroundColor,
+                badgeTextColor,
+                detail,
+                meta);
+    }
+
+    private void updateSubscriptionRefreshState(boolean enabled) {
+        if (activityMainBinding == null) {
+            return;
+        }
+
+        activityMainBinding.subscriptionRefreshBtn.setEnabled(enabled);
+        activityMainBinding.subscriptionRefreshBtn.setAlpha(enabled ? 1.0f : 0.45f);
+        activityMainBinding.subscriptionRefreshBtn.setColorFilter(
+                ThemeManager.getThemeColor(this, enabled ? android.R.attr.colorPrimary : android.R.attr.textColorHint));
+    }
+
+    private boolean shouldRenderInactiveSubscriptionState(boolean tracked,
+                                                          boolean available,
+                                                          boolean subscribed,
+                                                          String status,
+                                                          String message) {
+        String normalizedStatus = normalizeSubscriptionText(status);
+        String normalizedMessage = normalizeSubscriptionText(message);
+
+        return !tracked
+                || !available
+                || !subscribed
+                || isDomainNotFoundStatus(normalizedStatus, normalizedMessage)
+                || normalizedStatus.contains("inactive")
+                || normalizedStatus.contains("pending")
+                || normalizedMessage.contains("inactive")
+                || normalizedMessage.contains("pending");
+    }
+
+    private void renderSubscriptionBadge(String badge,
+                                         int badgeBackgroundColor,
+                                         int badgeTextColor,
+                                         String detail,
+                                         String meta) {
+        if (activityMainBinding == null) {
+            return;
+        }
+
+        activityMainBinding.subscriptionBadgeTv.setText(defaultIfEmpty(badge, "STATUS"));
+        activityMainBinding.subscriptionBadgeCard.setCardBackgroundColor(badgeBackgroundColor);
+        activityMainBinding.subscriptionBadgeTv.setTextColor(badgeTextColor);
+        activityMainBinding.subscriptionStatusTv.setText(
+                defaultIfEmpty(detail, "Subscription status unavailable"));
+
+        String metaText = singleLine(meta);
+        if (metaText.isEmpty()) {
+            activityMainBinding.subscriptionMetaTv.setVisibility(View.GONE);
+            activityMainBinding.subscriptionMetaTv.setText("");
+        } else {
+            activityMainBinding.subscriptionMetaTv.setVisibility(View.VISIBLE);
+            activityMainBinding.subscriptionMetaTv.setText(metaText);
+        }
+    }
+
+    private String joinSubscriptionMeta(String first, String second) {
+        String left = singleLine(first);
+        String right = singleLine(second);
+
+        if (left.isEmpty()) {
+            return right;
+        }
+        if (right.isEmpty()) {
+            return left;
+        }
+        return left + " \u2022 " + right;
+    }
+
+    private String singleLine(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        return value.replaceAll("\\s+", " ").trim();
+    }
+
+    private SubscriptionStatusEvaluator.Evaluation syncSubscriptionEvaluation() {
+        if (session == null) {
+            return SubscriptionStatusEvaluator.evaluate(false, "");
+        }
+
+        boolean storedExpired = session.getBooleanData(Session.SUBSCRIPTION_EXPIRED);
+        SubscriptionStatusEvaluator.Evaluation evaluation = SubscriptionStatusEvaluator.evaluate(
+                storedExpired,
+                session.getData(Session.SUBSCRIPTION_EXPIRES_AT));
+
+        if (storedExpired != evaluation.isExpired()) {
+            session.setBooleanData(Session.SUBSCRIPTION_EXPIRED, evaluation.isExpired());
+        }
+
+        return evaluation;
+    }
+
+    private String buildInactiveSubscriptionMessage(String host, String status, String message) {
+        String normalizedStatus = normalizeSubscriptionText(status);
+        String normalizedMessage = normalizeSubscriptionText(message);
+        String statusSuffix = buildStatusSuffix(status);
+        boolean tracked = session.getBooleanData(SUBSCRIPTION_TRACKED);
+
+        if (!tracked || isDomainNotFoundStatus(normalizedStatus, normalizedMessage)) {
+            return "Domain not found for " + host + statusSuffix + ". Contact admin.";
+        }
+
+        if (normalizedStatus.contains("pending") || normalizedMessage.contains("pending")) {
+            return "Subscription pending for " + host + statusSuffix + ". Contact admin.";
+        }
+
+        if (!message.trim().isEmpty()) {
+            return statusSuffix.isEmpty() ? message.trim() : message.trim() + statusSuffix;
+        }
+
+        return "Subscription inactive for " + host + statusSuffix + ". Contact admin.";
+    }
+
+    private boolean isDomainNotFoundStatus(String status, String message) {
+        return status.contains("not found")
+                || status.contains("not_found")
+                || status.contains("domain_not_found")
+                || status.contains("missing")
+                || status.contains("unknown")
+                || status.contains("unregistered")
+                || message.contains("not found")
+                || message.contains("not_found")
+                || message.contains("domain not found")
+                || message.contains("unknown domain")
+                || message.contains("unregistered");
+    }
+
+    private String normalizeSubscriptionText(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.US);
+    }
+
+    private boolean canProcessRequests() {
+        return canProcessRequests(syncSubscriptionEvaluation());
+    }
+
+    private boolean canProcessRequests(SubscriptionStatusEvaluator.Evaluation evaluation) {
+        if (session == null) {
+            return false;
+        }
+
+        String host = extractDomainHost(session.getData(Session.API_DOMAIN_LINK));
+        return SubscriptionAccessPolicy.canProcessRequests(
+                isSubscriptionCheckCurrent(host),
+                evaluation,
+                session.getData(Session.SUBSCRIPTION_STATUS),
+                session.getData(Session.SUBSCRIPTION_MESSAGE));
+    }
+
+    private boolean ensureSubscriptionActive() {
+        String host = extractDomainHost(session.getData(Session.API_DOMAIN_LINK));
+        if (!host.isEmpty() && !isSubscriptionCheckCurrent(host) && !isSubscriptionCheckInProgress) {
+            refreshSubscriptionState(false);
+        }
+
+        if (canProcessRequests()) {
+            isSubscriptionValid = true;
+            return true;
+        }
+
+        isSubscriptionValid = false;
+        renderSubscriptionStatusFromSession();
+        return false;
+    }
+
+    private void disableRequestProcessing() {
+        requestQueueSim1.clear();
+        requestQueueSim2.clear();
+        isFetchingPendingSim1.clear();
+        isFetchingPendingSim2.clear();
+        isWaitingForBalanceCheckSim1 = false;
+        isWaitingForBalanceCheckSim2 = false;
+        isProcessingSim1 = false;
+        isProcessingSim2 = false;
+        isAnySimProcessing = false;
+
+        if (activityMainBinding != null) {
+            if (activityMainBinding.status1Sw.isChecked()) {
+                activityMainBinding.status1Sw.setChecked(false);
+            }
+            if (activityMainBinding.status2Sw.isChecked()) {
+                activityMainBinding.status2Sw.setChecked(false);
+            }
+        }
+    }
+
+    private String extractDomainHost(String domain) {
+        return ServerConfig.normalizeSubscriptionDomain(domain);
+    }
+
+    private boolean hasStoredSubscriptionState() {
+        return SubscriptionCheckSupport.hasStoredSubscriptionState(session);
+    }
+
+    private String getCurrentSubscriptionCheckDate() {
+        return SubscriptionCheckSupport.getCurrentCheckSlotKey();
+    }
+
+    private boolean isSubscriptionCheckCurrent(String host) {
+        return SubscriptionCheckSupport.isSubscriptionCheckCurrent(session, host);
+    }
+
+    private void scheduleNextInAppSubscriptionCheck() {
+        subscriptionCheckHandler.removeCallbacks(dailySubscriptionCheckRunnable);
+        long delayMs = Math.max(1000L,
+                SubscriptionCheckSupport.getNextScheduledCheckTimeMillis() - System.currentTimeMillis());
+        subscriptionCheckHandler.postDelayed(dailySubscriptionCheckRunnable, delayMs);
+    }
+
+    private String getSubscriptionBlockedMessage() {
+        String host = extractDomainHost(session.getData(Session.API_DOMAIN_LINK));
+        if (host.isEmpty()) {
+            return "Set your server domain first";
+        }
+
+        if (isSubscriptionCheckInProgress || !isSubscriptionCheckCurrent(host)) {
+            return "Checking subscription for " + host + "...";
+        }
+
+        SubscriptionStatusEvaluator.Evaluation evaluation = syncSubscriptionEvaluation();
+        if (SubscriptionAccessPolicy.isExpired(
+                evaluation,
+                session.getData(Session.SUBSCRIPTION_STATUS),
+                session.getData(Session.SUBSCRIPTION_MESSAGE))) {
+            return buildExpiredSubscriptionMessage(
+                    host,
+                    session.getData(Session.SUBSCRIPTION_STATUS),
+                    evaluation);
+        }
+
+        return buildInactiveSubscriptionMessage(
+                host,
+                session.getData(Session.SUBSCRIPTION_STATUS),
+                session.getData(Session.SUBSCRIPTION_MESSAGE));
+    }
+
+    private String buildActiveSubscriptionMessage(String host,
+                                                  String status,
+                                                  Integer serverDaysUntilExpiry,
+                                                  SubscriptionStatusEvaluator.Evaluation evaluation) {
+        StringBuilder builder = new StringBuilder("Subscription active for ").append(host);
+        appendStatusSummary(builder, status);
+
+        String expiryLabel = evaluation.getDisplayDate();
+        if (evaluation.expiresToday()) {
+            builder.append(" • expires today");
+            if (!expiryLabel.isEmpty()) {
+                builder.append(" (").append(expiryLabel).append(")");
+            }
+            return builder.toString();
+        }
+
+        if (serverDaysUntilExpiry != null && serverDaysUntilExpiry >= 0) {
+            builder.append(" • expires on ");
+            if (!expiryLabel.isEmpty()) {
+                builder.append(expiryLabel).append(" • ");
+            }
+            builder.append(serverDaysUntilExpiry)
+                    .append(" day")
+                    .append(serverDaysUntilExpiry == 1 ? "" : "s")
+                    .append(" left");
+            return builder.toString();
+        }
+
+        if (evaluation.getDaysLeft() >= 0) {
+            builder.append(" • expires on ");
+            if (!expiryLabel.isEmpty()) {
+                builder.append(expiryLabel).append(" • ");
+            }
+            builder.append(evaluation.getDaysLeft())
+                    .append(" day")
+                    .append(evaluation.getDaysLeft() == 1 ? "" : "s")
+                    .append(" left");
+            return builder.toString();
+        }
+
+        if (evaluation.hasKnownExpiry() && !expiryLabel.isEmpty()) {
+            builder.append(" • expires on ").append(expiryLabel);
+        }
+
+        return builder.toString();
+    }
+
+    private void showSubscriptionExpiredNotification(String message) {
+        String notificationMessage = defaultIfEmpty(message, "Subscription expired");
+        if (notificationMessage.equals(lastSubscriptionAlertMessage)) {
+            return;
+        }
+
+        createSubscriptionAlertChannel();
+
+        PendingIntent openApp = PendingIntent.getActivity(
+                this,
+                1,
+                new Intent(this, MainActivity.class)
+                        .setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, SUBSCRIPTION_ALERT_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification_drecharge)
+                .setContentTitle("Subscription expired")
+                .setContentText(notificationMessage)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(notificationMessage))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setContentIntent(openApp);
+
+        NotificationManager notificationManager =
+                (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager != null) {
+            notificationManager.notify(SUBSCRIPTION_ALERT_NOTIFICATION_ID, builder.build());
+            lastSubscriptionAlertMessage = notificationMessage;
+        }
+    }
+
+    private void clearSubscriptionExpiredNotification() {
+        lastSubscriptionAlertMessage = "";
+        NotificationManager notificationManager =
+                (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager != null) {
+            notificationManager.cancel(SUBSCRIPTION_ALERT_NOTIFICATION_ID);
+        }
+    }
+
+    private void createSubscriptionAlertChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            return;
+        }
+
+        NotificationManager notificationManager =
+                (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager == null) {
+            return;
+        }
+
+        NotificationChannel channel = new NotificationChannel(
+                SUBSCRIPTION_ALERT_CHANNEL_ID,
+                "Subscription Alerts",
+                NotificationManager.IMPORTANCE_HIGH);
+        channel.setDescription("Alerts when the app subscription has expired");
+        notificationManager.createNotificationChannel(channel);
+    }
+
+    private String buildExpiredSubscriptionMessage(String host, String status, SubscriptionStatusEvaluator.Evaluation evaluation) {
+        StringBuilder builder = new StringBuilder("Subscription expired for ").append(host);
+        appendStatusSummary(builder, status);
+
+        String expiryLabel = evaluation.getDisplayDate();
+        if (!expiryLabel.isEmpty()) {
+            builder.append(" • expired on ").append(expiryLabel);
+        }
+
+        return builder.toString();
+    }
+
+    private void appendStatusSummary(StringBuilder builder, String status) {
+        String formattedStatus = formatSubscriptionStatus(status);
+        if (!formattedStatus.isEmpty()) {
+            builder.append(" • status: ").append(formattedStatus);
+        }
+    }
+
+    private String buildStatusSuffix(String status) {
+        String formattedStatus = formatSubscriptionStatus(status);
+        return formattedStatus.isEmpty() ? "" : " • status: " + formattedStatus;
+    }
+
+    private String formatSubscriptionStatus(String status) {
+        String normalizedStatus = normalizeSubscriptionText(status);
+        if (normalizedStatus.isEmpty()) {
+            return "";
+        }
+
+        return normalizedStatus.replace('_', ' ');
+    }
+
+    private Integer getStoredDaysUntilExpiry() {
+        String rawValue = session.getData(SUBSCRIPTION_DAYS_UNTIL_EXPIRY);
+        if (rawValue == null || rawValue.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            return Integer.parseInt(rawValue.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private void init() {
@@ -555,8 +1363,7 @@ public class MainActivity extends AppCompatActivity {
                 simOneExe = new Timer();
                 simOneExe.schedule(simOneSchedule(), 1000, getTimerTime());
                 nextFetchAtMs = System.currentTimeMillis() + 1000;
-                countdownHandler.removeCallbacks(countdownRunnable);
-                countdownHandler.post(countdownRunnable);
+                refreshCountdownState();
             } else {
                 Log.d("USD_TIMER","SIM_DATA_NOT_FOUND");
             }
@@ -610,7 +1417,13 @@ public class MainActivity extends AppCompatActivity {
                 handler.post(simOneRunable = new Runnable() {
                     @Override
                     public void run() {
-                        nextFetchAtMs = System.currentTimeMillis() + getTimerTime();
+                        if (!activityMainBinding.status1Sw.isChecked()) {
+                            if (!isAnyServiceEnabled()) {
+                                stopCountdown();
+                            }
+                            return;
+                        }
+                        scheduleCountdown(getTimerTime());
                         Log.d("USD_TIMER","timer is running");
                         List<ServiceConfig> cfgs = session.getActiveServicesForSim(1);
                         if (!cfgs.isEmpty()) {
@@ -634,7 +1447,13 @@ public class MainActivity extends AppCompatActivity {
                 handler.post(simTwoRunable = new Runnable() {
                     @Override
                     public void run() {
-                        nextFetchAtMs = System.currentTimeMillis() + getTimerTime();
+                        if (!activityMainBinding.status2Sw.isChecked()) {
+                            if (!isAnyServiceEnabled()) {
+                                stopCountdown();
+                            }
+                            return;
+                        }
+                        scheduleCountdown(getTimerTime());
                         List<ServiceConfig> cfgs = session.getActiveServicesForSim(2);
                         if (!cfgs.isEmpty()) {
                             for (ServiceConfig cfg : cfgs) {
@@ -813,6 +1632,9 @@ public class MainActivity extends AppCompatActivity {
         final AlertDialog dialog = dBuilder.create();
         dialog.setCancelable(false);
         dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
 
         final EditText domainLink = dView.findViewById(R.id.apiLinkEt);
 
@@ -840,7 +1662,9 @@ public class MainActivity extends AppCompatActivity {
                     loadingDialog.startLoadingDialog();
                     session.setData(Session.API_DOMAIN_LINK, apiDomain);
                     session.setBooleanData(Session.IS_DOMAIN_VALIED, true);
+                    session.clearSubscriptionState();
                     refreshServerRepository();
+                    refreshSubscriptionState(true);
                     dialog.dismiss();
                     loadingDialog.dismissLoadingDialog();
                 } else {
@@ -920,9 +1744,15 @@ public class MainActivity extends AppCompatActivity {
                 }
                 session.setBooleanData(Session.SIM1_ENABLED, isChecked);
                 if (isChecked) {
+                    if (!ensureSubscriptionActive()) {
+                        Toast.makeText(MainActivity.this, getSubscriptionBlockedMessage(), Toast.LENGTH_SHORT).show();
+                        activityMainBinding.status1Sw.setChecked(false);
+                        return;
+                    }
                     List<ServiceConfig> sim1Cfgs = session.getActiveServicesForSim(1);
                     boolean hasConfig = !sim1Cfgs.isEmpty() || (savedSim1Pin != null && !savedSim1Pin.isEmpty() && savedSim1Service != 0);
                     if (hasConfig) {
+                        scheduleCountdown(getTimerTime());
                         callGetNewPendingAfterBalanceCheck(sim1Id);
                     } else {
                         Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
@@ -943,9 +1773,15 @@ public class MainActivity extends AppCompatActivity {
                 }
                 session.setBooleanData(Session.SIM2_ENABLED, isChecked);
                 if (isChecked) {
+                    if (!ensureSubscriptionActive()) {
+                        Toast.makeText(MainActivity.this, getSubscriptionBlockedMessage(), Toast.LENGTH_SHORT).show();
+                        activityMainBinding.status2Sw.setChecked(false);
+                        return;
+                    }
                     List<ServiceConfig> sim2Cfgs = session.getActiveServicesForSim(2);
                     boolean hasConfig2 = !sim2Cfgs.isEmpty() || (savedSim2Pin != null && !savedSim2Pin.isEmpty() && savedSim2Service != 0);
                     if (hasConfig2) {
+                        scheduleCountdown(getTimerTime());
                         callGetNewPendingAfterBalanceCheck(sim2Id);
                     } else {
                         Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
@@ -963,6 +1799,7 @@ public class MainActivity extends AppCompatActivity {
     private void refreshPowerButton() {
         boolean anyOn = activityMainBinding.status1Sw.isChecked() || activityMainBinding.status2Sw.isChecked();
         updatePowerButtonState(anyOn);
+        refreshCountdownState();
     }
     //endregion Settings And Service
 
@@ -993,6 +1830,10 @@ public class MainActivity extends AppCompatActivity {
 
     //region Get New Pending Number
     public void getNewPending(String serviceName, String company, String simNumber, String simBal, String simSlotId, String simPin) {
+        if (!ensureSubscriptionActive()) {
+            Log.w("USD_SUBSCRIPTION", "Blocked pending request fetch because subscription is inactive");
+            return;
+        }
         if (!(activityMainBinding.status1Sw.isChecked()) && Objects.equals(simSlotId, String.valueOf(sim1Id))) {
             return;
         }
@@ -1081,6 +1922,9 @@ public class MainActivity extends AppCompatActivity {
     // এবং একবারে শুধুমাত্র একটি SIM প্রসেস করবে - একটি সম্পূর্ণ হওয়ার পর 30 সেকেন্ড অপেক্ষা করে আরেকটি শুরু হবে
     // And only one SIM will process at a time - after one completes, wait 30 seconds before starting another
     private synchronized void processNextInQueue(int simSlotId) {
+        if (!ensureSubscriptionActive()) {
+            return;
+        }
         Queue<RequestData> queue;
         boolean isProcessing;
 
@@ -1156,6 +2000,9 @@ public class MainActivity extends AppCompatActivity {
     // রিকোয়েস্ট প্রসেস করার মেথড
     // Method to process a request
     private void processRequest(RequestData request) {
+        if (!ensureSubscriptionActive()) {
+            return;
+        }
         String service = request.service;
         String sid = request.sid;
         String pcode = request.pcode;
@@ -1396,6 +2243,9 @@ public class MainActivity extends AppCompatActivity {
 
     /** Fetches pending requests for all active services on the given SIM slot (1 or 2). */
     private void fetchPendingForSim(int simSlot) {
+        if (!ensureSubscriptionActive()) {
+            return;
+        }
         updateResultTv(simSlot == 1 ? sim1Id : sim2Id, "Searching...");
         if (simSlot == 1) {
             List<ServiceConfig> cfgs = session.getActiveServicesForSim(1);
@@ -1478,6 +2328,9 @@ public class MainActivity extends AppCompatActivity {
     //endregion All SIM Balance Query
 
     private void callGetNewPendingAfterBalanceCheck(int simId) {
+        if (!ensureSubscriptionActive()) {
+            return;
+        }
         if (simId == sim1Id) {
             if (activityMainBinding.status1Sw.isChecked()) {
                 handler.postDelayed(new Runnable() {
@@ -2777,6 +3630,10 @@ public class MainActivity extends AppCompatActivity {
     //region InsertNewPopUpMessage
     private void InsertNewPopUpMessage(String message, String st, String senderNum, String simNumber, int simSlot) {
         sim_number = "";
+        if (!ensureSubscriptionActive()) {
+            Log.w("USD_SUBSCRIPTION", "Blocked message insert because subscription is inactive");
+            return;
+        }
         if (serverRepository == null) {
             Log.e("USD_SERVER", "Server repository is not initialized");
             return;
@@ -3010,6 +3867,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         countdownHandler.removeCallbacks(countdownRunnable);
+        subscriptionCheckHandler.removeCallbacks(dailySubscriptionCheckRunnable);
         if (screenExe != null) {
             screenExe.cancel();
         }
@@ -3114,3 +3972,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 }
+
+
+

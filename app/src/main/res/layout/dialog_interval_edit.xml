@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@color/surface">
+    android:background="?attr/colorSurface">
 
-    <!-- Header -->
+    <!-- ── Header ── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -21,7 +22,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="Request Interval"
+            android:text="App Settings"
             android:textStyle="bold"
             android:textSize="18sp"
             android:textColor="#FFFFFF"
@@ -30,7 +31,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="How often to poll the server for new requests"
+            android:text="Interval · Theme · Exit"
             android:textSize="12sp"
             android:textColor="@color/teal_light"
             android:gravity="center"
@@ -38,81 +39,335 @@
 
     </LinearLayout>
 
-    <!-- Body -->
+    <!-- ── Body ── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="20dp">
 
+        <!-- ─ Request Interval section ─ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="10dp">
+
+            <View
+                android:layout_width="3dp"
+                android:layout_height="16dp"
+                android:background="?attr/colorPrimary"
+                android:layout_marginEnd="10dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Request Interval"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurface"/>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="6dp">
+
+            <EditText
+                android:id="@+id/dialogIntervalEt"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:hint="30"
+                android:inputType="number"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="@color/text_hint"
+                android:background="@drawable/bg_rounded_input"
+                android:layout_marginEnd="10dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="seconds"
+                android:textSize="13sp"
+                android:textColor="@color/text_secondary"/>
+
+        </LinearLayout>
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="INTERVAL (SECONDS)"
-            android:textSize="11sp"
-            android:textColor="@color/teal_primary"
-            android:textStyle="bold"
-            android:letterSpacing="0.06"
-            android:layout_marginBottom="8dp"/>
-
-        <EditText
-            android:id="@+id/dialogIntervalEt"
-            android:layout_width="match_parent"
-            android:layout_height="52dp"
-            android:hint="30"
-            android:inputType="number"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:fontFamily="monospace"
-            android:textColor="@color/text_primary"
-            android:textColorHint="@color/text_hint"
-            android:background="@drawable/bg_rounded_input"
-            android:layout_marginBottom="8dp"/>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Default: 30 seconds. Minimum: 5 seconds."
+            android:text="Default: 30s · Minimum: 5s"
             android:textSize="11sp"
             android:textColor="@color/text_hint"
             android:layout_marginBottom="20dp"/>
 
-        <!-- Buttons -->
+        <!-- ─ Divider ─ -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- ─ App Theme section ─ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="12dp">
 
-            <Button
-                android:id="@+id/dialogIntervalCancelBtn"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="Cancel"
-                android:textColor="@color/text_secondary"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:background="@drawable/bg_btn_cancel"
-                android:layout_marginEnd="8dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"/>
+            <View
+                android:layout_width="3dp"
+                android:layout_height="16dp"
+                android:background="?attr/colorPrimary"
+                android:layout_marginEnd="10dp"/>
 
-            <Button
-                android:id="@+id/dialogIntervalSaveBtn"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:text="Save"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="App Theme"
                 android:textStyle="bold"
-                android:background="@drawable/bg_btn_confirm"
-                android:layout_marginStart="8dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"/>
+                android:textSize="13sp"
+                android:textColor="?attr/colorOnSurface"/>
 
         </LinearLayout>
+
+        <RadioGroup
+            android:id="@+id/themeRadioGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="20dp">
+
+            <!-- Theme 1: Cyber Dark -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardNeonDark"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="#0B0F1A">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="12dp">
+
+                    <RadioButton
+                        android:id="@+id/rbNeonDark"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="#00D4FF"
+                        android:layout_marginEnd="10dp"/>
+
+                    <!-- Color swatches -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginEnd="12dp">
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#0B0F1A"/>
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#00D4FF"/>
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#4F46E5"/>
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#22C55E"/>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Cyber Dark"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:textColor="#FFFFFF"/>
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Dark UI · Neon cyan"
+                            android:textSize="10sp"
+                            android:textColor="#94A3B8"
+                            android:layout_marginTop="1dp"/>
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Theme 2: Cash Green -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardBankingGreen"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="#F8FAFC">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="12dp">
+
+                    <RadioButton
+                        android:id="@+id/rbBankingGreen"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="#16A34A"
+                        android:layout_marginEnd="10dp"/>
+
+                    <!-- Color swatches -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginEnd="12dp">
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#16A34A"/>
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#22C55E"/>
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#DCFCE7"/>
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#F8FAFC"/>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Cash Green"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:textColor="#0F172A"/>
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Light UI · bKash &amp; Nagad vibe"
+                            android:textSize="10sp"
+                            android:textColor="#475569"
+                            android:layout_marginTop="1dp"/>
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Theme 3: Indigo Pro -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardIndigoPro"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:strokeWidth="0dp"
+                app:cardBackgroundColor="#0F172A">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="12dp">
+
+                    <RadioButton
+                        android:id="@+id/rbIndigoPro"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="#4F46E5"
+                        android:layout_marginEnd="10dp"/>
+
+                    <!-- Color swatches -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginEnd="12dp">
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#4F46E5"/>
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#3B82F6"/>
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#00D4FF"/>
+                        <View android:layout_width="14dp" android:layout_height="28dp" android:background="#0F172A"/>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Indigo Pro"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:textColor="#E2E8F0"/>
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Dark UI · Stripe &amp; PayPal style"
+                            android:textSize="10sp"
+                            android:textColor="#94A3B8"
+                            android:layout_marginTop="1dp"/>
+                    </LinearLayout>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </RadioGroup>
+
+        <!-- ─ Divider ─ -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- ─ Save button ─ -->
+        <Button
+            android:id="@+id/dialogIntervalSaveBtn"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Save Settings"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_btn_confirm"
+            android:layout_marginBottom="10dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"/>
+
+        <!-- ─ Exit App button ─ -->
+        <Button
+            android:id="@+id/dialogExitAppBtn"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Exit App"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_btn_cancel"
+            android:layout_marginBottom="4dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"/>
+
     </LinearLayout>
 </LinearLayout>
