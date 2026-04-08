@@ -158,7 +158,6 @@ public class SettingsActivity extends AppCompatActivity {
         EditText intervalEt      = dialogView.findViewById(R.id.dialogIntervalEt);
         Button saveBtn           = dialogView.findViewById(R.id.dialogIntervalSaveBtn);
         Button exitBtn           = dialogView.findViewById(R.id.dialogExitAppBtn);
-        RadioGroup themeGroup    = dialogView.findViewById(R.id.themeRadioGroup);
         RadioButton rbNeonDark   = dialogView.findViewById(R.id.rbNeonDark);
         RadioButton rbBankingGreen = dialogView.findViewById(R.id.rbBankingGreen);
         RadioButton rbIndigoPro  = dialogView.findViewById(R.id.rbIndigoPro);
@@ -173,17 +172,26 @@ public class SettingsActivity extends AppCompatActivity {
             intervalEt.setSelection(current.length());
         }
 
+        // Helper: uncheck all then check the chosen one
+        // (RadioGroup.getCheckedRadioButtonId() doesn't work for nested RadioButtons)
+        Runnable selectNeon    = () -> { rbNeonDark.setChecked(true);    rbBankingGreen.setChecked(false); rbIndigoPro.setChecked(false); };
+        Runnable selectGreen   = () -> { rbBankingGreen.setChecked(true); rbNeonDark.setChecked(false);    rbIndigoPro.setChecked(false); };
+        Runnable selectIndigo  = () -> { rbIndigoPro.setChecked(true);   rbNeonDark.setChecked(false);     rbBankingGreen.setChecked(false); };
+
         // Pre-select current theme
         switch (ThemeManager.getSelectedTheme(this)) {
-            case ThemeManager.THEME_NEON_DARK:    rbNeonDark.setChecked(true);     break;
-            case ThemeManager.THEME_INDIGO_PRO:   rbIndigoPro.setChecked(true);    break;
-            default:                              rbBankingGreen.setChecked(true); break;
+            case ThemeManager.THEME_NEON_DARK:   selectNeon.run();   break;
+            case ThemeManager.THEME_INDIGO_PRO:  selectIndigo.run(); break;
+            default:                             selectGreen.run();  break;
         }
 
         // Tap anywhere on a card to select that theme
-        cardNeonDark.setOnClickListener(v -> rbNeonDark.setChecked(true));
-        cardBankingGreen.setOnClickListener(v -> rbBankingGreen.setChecked(true));
-        cardIndigoPro.setOnClickListener(v -> rbIndigoPro.setChecked(true));
+        cardNeonDark.setOnClickListener(v    -> selectNeon.run());
+        cardBankingGreen.setOnClickListener(v -> selectGreen.run());
+        cardIndigoPro.setOnClickListener(v   -> selectIndigo.run());
+        rbNeonDark.setOnClickListener(v      -> selectNeon.run());
+        rbBankingGreen.setOnClickListener(v  -> selectGreen.run());
+        rbIndigoPro.setOnClickListener(v     -> selectIndigo.run());
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(dialogView)
@@ -219,11 +227,11 @@ public class SettingsActivity extends AppCompatActivity {
             }
             session.setData(Session.TIME_INTERVAL, String.valueOf(seconds));
 
-            // Save theme
-            int selectedTheme = ThemeManager.THEME_BANKING_GREEN;
-            int checkedId = themeGroup.getCheckedRadioButtonId();
-            if (checkedId == R.id.rbNeonDark)      selectedTheme = ThemeManager.THEME_NEON_DARK;
-            else if (checkedId == R.id.rbIndigoPro) selectedTheme = ThemeManager.THEME_INDIGO_PRO;
+            // Save theme — read isChecked() directly since RadioButtons are nested in Cards
+            int selectedTheme;
+            if (rbNeonDark.isChecked())        selectedTheme = ThemeManager.THEME_NEON_DARK;
+            else if (rbIndigoPro.isChecked())  selectedTheme = ThemeManager.THEME_INDIGO_PRO;
+            else                               selectedTheme = ThemeManager.THEME_BANKING_GREEN;
             boolean themeChanged = selectedTheme != ThemeManager.getSelectedTheme(this);
             ThemeManager.setSelectedTheme(this, selectedTheme);
 
