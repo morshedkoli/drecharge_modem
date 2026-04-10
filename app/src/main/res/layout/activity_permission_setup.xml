@@ -31,7 +31,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Grant the required permissions to continue"
-            android:textColor="@color/teal_light"
+            android:textColor="?attr/colorTealLight"
             android:textSize="13sp"
             android:layout_marginTop="6dp"/>
 
@@ -92,7 +92,7 @@
                             android:layout_height="wrap_content"
                             android:text="Call, SMS, Phone State, Contacts"
                             android:textSize="11sp"
-                            android:textColor="@color/text_secondary"
+                            android:textColor="?attr/colorTextSecondary"
                             android:layout_marginTop="2dp"/>
 
                     </LinearLayout>
@@ -156,7 +156,7 @@
                             android:layout_height="wrap_content"
                             android:text="Required to auto-dial USSD codes"
                             android:textSize="11sp"
-                            android:textColor="@color/text_secondary"
+                            android:textColor="?attr/colorTextSecondary"
                             android:layout_marginTop="2dp"/>
 
                     </LinearLayout>
@@ -221,7 +221,7 @@
                             android:layout_height="wrap_content"
                             android:text="Tap ⋮ menu → Allow restricted settings"
                             android:textSize="11sp"
-                            android:textColor="@color/text_secondary"
+                            android:textColor="?attr/colorTextSecondary"
                             android:layout_marginTop="2dp"/>
 
                     </LinearLayout>
@@ -285,7 +285,7 @@
                             android:layout_height="wrap_content"
                             android:text="Show dialogs above other apps"
                             android:textSize="11sp"
-                            android:textColor="@color/text_secondary"
+                            android:textColor="?attr/colorTextSecondary"
                             android:layout_marginTop="2dp"/>
 
                     </LinearLayout>
@@ -349,7 +349,7 @@
                             android:layout_height="wrap_content"
                             android:text="Keep running in background without restriction"
                             android:textSize="11sp"
-                            android:textColor="@color/text_secondary"
+                            android:textColor="?attr/colorTextSecondary"
                             android:layout_marginTop="2dp"/>
 
                     </LinearLayout>
@@ -376,7 +376,7 @@
                 android:layout_height="wrap_content"
                 android:text="App Permissions and Accessibility are required. Restricted Settings is also required on Android 13+. Overlay and Battery settings are recommended for reliable background operation."
                 android:textSize="11sp"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/colorTextSecondary"
                 android:gravity="center"
                 android:layout_marginTop="4dp"
                 android:layout_marginBottom="16dp"

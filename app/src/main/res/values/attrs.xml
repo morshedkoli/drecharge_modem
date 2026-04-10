@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Custom theme attributes for dynamic color support across all 5 themes -->
+    <attr name="colorTextSecondary" format="color"/>
+    <attr name="colorTextHint" format="color"/>
+    <attr name="colorDivider" format="color"/>
+    <attr name="colorLogText" format="color"/>
+    <attr name="colorInactiveGrey" format="color"/>
+    <attr name="colorInactiveBg" format="color"/>
+    <attr name="colorTealLight" format="color"/>
+    <attr name="colorActiveGreen" format="color"/>
+    <attr name="colorActiveBg" format="color"/>
+    <attr name="colorHeaderStart" format="color"/>
+    <attr name="colorHeaderEnd" format="color"/>
+</resources>

@@ -10,6 +10,8 @@ public class ServiceConfig {
     public String dialCode1 = "";
     /** USSD dial template for type "0" (prepaid). Empty means same as dialCode1. */
     public String dialCode0 = "";
+    /** Whether the user's custom USSD dial templates are active (vs. built-in defaults). */
+    public boolean customUssdEnabled = false;
     /** Whether auto-enable/disable schedule is active for this service. */
     public boolean scheduleEnabled = false;
     /** Daily enable time in "HH:mm" format (24-hour). Empty = not set. */

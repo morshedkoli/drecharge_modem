@@ -88,6 +88,64 @@
     <color name="indigo_splash_end">#1E1B4B</color>
 
     <!-- ═══════════════════════════════════════════════════════════════
+         THEME 4: SOFT WHITE (Clean Minimal)
+         Apple / modern fintech inspired
+         Primary: #0284C7, Background: #FAFAFA
+         ═══════════════════════════════════════════════════════════════ -->
+    <color name="sw_primary">#0284C7</color>
+    <color name="sw_primary_dark">#0369A1</color>
+    <color name="sw_accent">#38BDF8</color>
+    <color name="sw_bg_screen">#FAFAFA</color>
+    <color name="sw_surface">#FFFFFF</color>
+    <color name="sw_header_start">#0369A1</color>
+    <color name="sw_header_end">#0284C7</color>
+    <color name="sw_text_primary">#0C1A2E</color>
+    <color name="sw_text_secondary">#4A5568</color>
+    <color name="sw_text_hint">#A0AEC0</color>
+    <color name="sw_divider">#E8EDF2</color>
+    <color name="sw_active_green">#16A34A</color>
+    <color name="sw_active_bg">#DCFCE7</color>
+    <color name="sw_inactive_grey">#A0AEC0</color>
+    <color name="sw_inactive_bg">#F0F4F8</color>
+    <color name="sw_teal_primary">#0284C7</color>
+    <color name="sw_teal_dark">#0369A1</color>
+    <color name="sw_teal_light">#E0F2FE</color>
+    <color name="sw_danger">#DC2626</color>
+    <color name="sw_log_text">#2D3748</color>
+    <color name="sw_splash_start">#0369A1</color>
+    <color name="sw_splash_center">#0284C7</color>
+    <color name="sw_splash_end">#075985</color>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         THEME 5: PEARL ROSE (Warm Soft White)
+         Soft cream/pink — natural complement to Soft White
+         Primary: #E11D48, Background: #FFF5F7
+         ═══════════════════════════════════════════════════════════════ -->
+    <color name="pr_primary">#E11D48</color>
+    <color name="pr_primary_dark">#BE123C</color>
+    <color name="pr_accent">#FB7185</color>
+    <color name="pr_bg_screen">#FFF5F7</color>
+    <color name="pr_surface">#FFFFFF</color>
+    <color name="pr_header_start">#BE123C</color>
+    <color name="pr_header_end">#E11D48</color>
+    <color name="pr_text_primary">#1A0510</color>
+    <color name="pr_text_secondary">#6B4655</color>
+    <color name="pr_text_hint">#B490A0</color>
+    <color name="pr_divider">#FAE8EF</color>
+    <color name="pr_active_green">#16A34A</color>
+    <color name="pr_active_bg">#DCFCE7</color>
+    <color name="pr_inactive_grey">#B490A0</color>
+    <color name="pr_inactive_bg">#FDF2F5</color>
+    <color name="pr_teal_primary">#E11D48</color>
+    <color name="pr_teal_dark">#BE123C</color>
+    <color name="pr_teal_light">#FCE7EF</color>
+    <color name="pr_danger">#DC2626</color>
+    <color name="pr_log_text">#5A2B3F</color>
+    <color name="pr_splash_start">#BE123C</color>
+    <color name="pr_splash_center">#E11D48</color>
+    <color name="pr_splash_end">#9F1239</color>
+
+    <!-- ═══════════════════════════════════════════════════════════════
          DEFAULT/CURRENT COLORS (Used by layouts - mapped by theme)
          These are the actual colors referenced in layouts
          ═══════════════════════════════════════════════════════════════ -->

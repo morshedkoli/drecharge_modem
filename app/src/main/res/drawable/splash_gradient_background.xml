@@ -2,12 +2,12 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     
-    <!-- Premium Fintech Dark Gradient -->
+    <!-- Green Banking Gradient -->
     <gradient
         android:angle="135"
-        android:startColor="#0D1B2A"
-        android:centerColor="#0F1F2E"
-        android:endColor="#0A0F1C"
+        android:startColor="#0D7A38"
+        android:centerColor="#16A34A"
+        android:endColor="#0A5C2B"
         android:type="linear" />
     
 </shape>

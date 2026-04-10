@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.os.Build;
 
 import com.dRecharge.modem.service.KeepAliveService;
+import com.dRecharge.modem.subscription.SubscriptionCheckScheduler;
 
 /**
  * Starts the KeepAliveService after device reboot so the accessibility service
@@ -24,6 +25,7 @@ public class BootReceiver extends BroadcastReceiver {
             } else {
                 context.startService(serviceIntent);
             }
+            SubscriptionCheckScheduler.scheduleNextDailyCheck(context);
         }
     }
 }

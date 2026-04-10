@@ -60,7 +60,7 @@
                     android:layout_marginTop="6dp"
                     android:gravity="center"
                     android:text="Enter your domain to activate syncing and subscription checks."
-                    android:textColor="@color/teal_light"
+                    android:textColor="?attr/colorTealLight"
                     android:textSize="12sp" />
 
             </LinearLayout>
@@ -78,7 +78,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="SERVER DOMAIN"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="?attr/colorTextSecondary"
                     android:textSize="11sp"
                     android:textStyle="bold"
                     android:letterSpacing="0.08" />
@@ -97,7 +97,7 @@
                     app:boxStrokeColor="?attr/colorPrimary"
                     app:boxStrokeWidth="1dp"
                     app:boxStrokeWidthFocused="2dp"
-                    app:hintTextColor="@color/text_hint">
+                    app:hintTextColor="?attr/colorTextHint">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/apiLinkEt"
@@ -110,7 +110,7 @@
                         android:paddingStart="4dp"
                         android:paddingEnd="4dp"
                         android:textColor="?attr/colorOnSurface"
-                        android:textColorHint="@color/text_hint"
+                        android:textColorHint="?attr/colorTextHint"
                         android:textSize="15sp" />
 
                 </com.google.android.material.textfield.TextInputLayout>
@@ -125,7 +125,7 @@
                     android:paddingEnd="12dp"
                     android:paddingBottom="10dp"
                     android:text="Use the full domain address. Example: https://yourdomain.com"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="?attr/colorTextSecondary"
                     android:textSize="12sp" />
 
                 <LinearLayout
@@ -145,7 +145,7 @@
                         android:insetBottom="0dp"
                         android:text="Cancel"
                         android:textAllCaps="false"
-                        android:textColor="@color/text_secondary"
+                        android:textColor="?attr/colorTextSecondary"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 

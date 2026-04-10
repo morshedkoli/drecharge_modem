@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">dRecharge Modem v1</string>
+    <string name="app_name">dRecharge Modem Ultimate</string>
     <string name="service_atr">Enable permissions for use USSD displays. From eng.jakir.controller</string>
     <string name="ussd_service_description">Enable this accessibility service to automatically read and process USSD dialer responses for balance check and recharge.</string>
 

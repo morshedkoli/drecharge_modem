@@ -50,7 +50,7 @@
             android:textSize="12sp"
             android:gravity="center"
             android:text="No PIN"
-            android:textColor="@color/text_hint"/>
+            android:textColor="?attr/colorTextHint"/>
 
         <!-- SIM -->
         <TextView
@@ -59,7 +59,7 @@
             android:layout_height="wrap_content"
             android:textSize="12sp"
             android:gravity="center"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/colorTextSecondary"
             android:text="SIM 1"/>
 
         <!-- Status badge -->
@@ -71,7 +71,7 @@
             android:gravity="center"
             android:textStyle="bold"
             android:text="Inactive"
-            android:textColor="@color/inactive_grey"
+            android:textColor="?attr/colorInactiveGrey"
             android:background="@drawable/bg_badge"
             android:paddingTop="4dp"
             android:paddingBottom="4dp"
@@ -93,19 +93,6 @@
 
     </LinearLayout>
 
-    <!-- USSD Code display -->
-    <TextView
-        android:id="@+id/svcUssdCode"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="28dp"
-        android:paddingEnd="14dp"
-        android:paddingBottom="4dp"
-        android:textSize="11sp"
-        android:textColor="@color/text_secondary"
-        android:fontFamily="monospace"
-        android:text="*444*{PHONE}*{AMOUNT}*{PIN}#"/>
-
     <!-- Schedule hint — visible only when a schedule is configured -->
     <TextView
         android:id="@+id/svcSchedule"
@@ -122,7 +109,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="@color/divider"
+        android:background="?attr/colorDivider"
         android:layout_marginStart="14dp"/>
 
 </LinearLayout>

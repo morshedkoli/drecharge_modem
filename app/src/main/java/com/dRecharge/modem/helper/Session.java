@@ -3,6 +3,9 @@ package com.dRecharge.modem.helper;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import androidx.security.crypto.EncryptedSharedPreferences;
+import androidx.security.crypto.MasterKey;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -12,12 +15,26 @@ import java.util.Locale;
 public class Session {
     SharedPreferences pref;
     SharedPreferences.Editor editor;
-    Context _context;
-    int PRIVATE_MODE = 0;
+
+    // I1: Use MODE_PRIVATE constant (was incorrectly set to 0, which is the same value but bad practice)
+    // N6: Replaced raw `int PRIVATE_MODE = 0` with proper MODE_PRIVATE usage via EncryptedSharedPreferences
 
     public static final String PREFER_NAME = "ReloadMobileModule";
     public static final String IS_DOMAIN_VALIED = "is_domain_valied";
     public static final String API_DOMAIN_LINK = "api_url";
+    public static final String SUBSCRIPTION_STATUS = "subscription_status";
+    public static final String SUBSCRIPTION_TRACKED = "subscription_tracked";
+    public static final String SUBSCRIPTION_AVAILABLE = "subscription_available";
+    public static final String SUBSCRIPTION_SUBSCRIBED = "subscription_subscribed";
+    public static final String SUBSCRIPTION_EXPIRED = "subscription_expired";
+    public static final String SUBSCRIPTION_EXPIRES_AT = "subscription_expires_at";
+    public static final String SUBSCRIPTION_DAYS_UNTIL_EXPIRY = "subscription_days_until_expiry";
+    public static final String SUBSCRIPTION_CHECKED_AT = "subscription_checked_at";
+    public static final String SUBSCRIPTION_MESSAGE = "subscription_message";
+    public static final String SUBSCRIPTION_LAST_DOMAIN = "subscription_last_domain";
+    public static final String SUBSCRIPTION_LAST_CHECK_DATE = "subscription_last_check_date";
+    public static final String SUBSCRIPTION_DOMAIN_LOGO = "subscription_domain_logo";
+    public static final String SUBSCRIPTION_DISPLAY_NAME = "subscription_display_name";
 
     public static final String SIM1_INFO = "sim1Info";
     public static final String SIM2_INFO = "sim2Info";
@@ -44,12 +61,29 @@ public class Session {
     public static final String SIM2_SERVICE_NAME = "sim2serviceame";
     public static final String SIM2_ENABLED = "sim2Enabled";
 
-    //Common
+    // Common
     public static final String TIME_INTERVAL = "timeInterval";
 
     public Session(Context context) {
-        this._context = context;
-        pref = _context.getSharedPreferences(PREFER_NAME, PRIVATE_MODE);
+        // I1: EncryptedSharedPreferences — SIM PINs and all session data are now encrypted at rest.
+        // Falls back to plain SharedPreferences if encryption init fails (e.g. unit tests / emulators
+        // with no hardware-backed keystore).
+        SharedPreferences prefs = null;
+        try {
+            MasterKey masterKey = new MasterKey.Builder(context.getApplicationContext())
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build();
+            prefs = EncryptedSharedPreferences.create(
+                    context.getApplicationContext(),
+                    PREFER_NAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM);
+        } catch (Exception e) {
+            // Fallback: plain prefs if encryption unavailable (should not happen on production devices)
+            prefs = context.getSharedPreferences(PREFER_NAME, Context.MODE_PRIVATE);
+        }
+        pref = prefs;
         editor = pref.edit();
     }
 
@@ -110,24 +144,41 @@ public class Session {
         return pref.getBoolean(SIM2_INFO, false);
     }
 
+    public void clearSubscriptionState() {
+        editor.remove(SUBSCRIPTION_STATUS);
+        editor.remove(SUBSCRIPTION_TRACKED);
+        editor.remove(SUBSCRIPTION_AVAILABLE);
+        editor.remove(SUBSCRIPTION_SUBSCRIBED);
+        editor.remove(SUBSCRIPTION_EXPIRED);
+        editor.remove(SUBSCRIPTION_EXPIRES_AT);
+        editor.remove(SUBSCRIPTION_DAYS_UNTIL_EXPIRY);
+        editor.remove(SUBSCRIPTION_CHECKED_AT);
+        editor.remove(SUBSCRIPTION_MESSAGE);
+        editor.remove(SUBSCRIPTION_LAST_DOMAIN);
+        editor.remove(SUBSCRIPTION_LAST_CHECK_DATE);
+        editor.remove(SUBSCRIPTION_DOMAIN_LOGO);
+        editor.remove(SUBSCRIPTION_DISPLAY_NAME);
+        editor.apply();
+    }
+
     // ── Per-service configuration ────────────────────────────────────────────
 
     private static String svcKey(String name, String field) {
-        // e.g. "svc_bKash_Agent_SIM_pin"
         return "svc_" + name.replaceAll("[^a-zA-Z0-9]", "_") + "_" + field;
     }
 
     public ServiceConfig getServiceConfig(String name) {
         ServiceConfig cfg = new ServiceConfig(name);
-        cfg.pin             = pref.getString(svcKey(name, "pin"), "");
-        cfg.sim             = pref.getInt(svcKey(name, "sim"), 1);
-        cfg.number          = pref.getString(svcKey(name, "number"), "");
-        cfg.active          = pref.getBoolean(svcKey(name, "active"), false);
-        cfg.dialCode1       = pref.getString(svcKey(name, "dialCode1"), "");
-        cfg.dialCode0       = pref.getString(svcKey(name, "dialCode0"), "");
-        cfg.scheduleEnabled = pref.getBoolean(svcKey(name, "scheduleEnabled"), false);
-        cfg.scheduleStart   = pref.getString(svcKey(name, "scheduleStart"), "");
-        cfg.scheduleEnd     = pref.getString(svcKey(name, "scheduleEnd"), "");
+        cfg.pin               = pref.getString(svcKey(name, "pin"), "");
+        cfg.sim               = pref.getInt(svcKey(name, "sim"), 1);
+        cfg.number            = pref.getString(svcKey(name, "number"), "");
+        cfg.active            = pref.getBoolean(svcKey(name, "active"), false);
+        cfg.dialCode1         = pref.getString(svcKey(name, "dialCode1"), "");
+        cfg.dialCode0         = pref.getString(svcKey(name, "dialCode0"), "");
+        cfg.customUssdEnabled = pref.getBoolean(svcKey(name, "customUssdEnabled"), false);
+        cfg.scheduleEnabled   = pref.getBoolean(svcKey(name, "scheduleEnabled"), false);
+        cfg.scheduleStart     = pref.getString(svcKey(name, "scheduleStart"), "");
+        cfg.scheduleEnd       = pref.getString(svcKey(name, "scheduleEnd"), "");
         return cfg;
     }
 
@@ -138,6 +189,7 @@ public class Session {
         editor.putBoolean(svcKey(cfg.name, "active"), cfg.active);
         editor.putString(svcKey(cfg.name, "dialCode1"), cfg.dialCode1);
         editor.putString(svcKey(cfg.name, "dialCode0"), cfg.dialCode0);
+        editor.putBoolean(svcKey(cfg.name, "customUssdEnabled"), cfg.customUssdEnabled);
         editor.putBoolean(svcKey(cfg.name, "scheduleEnabled"), cfg.scheduleEnabled);
         editor.putString(svcKey(cfg.name, "scheduleStart"), cfg.scheduleStart);
         editor.putString(svcKey(cfg.name, "scheduleEnd"), cfg.scheduleEnd);

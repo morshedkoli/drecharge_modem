@@ -20,14 +20,18 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.text.Editable;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -81,13 +85,13 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.lang.ref.WeakReference;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 
 import static com.dRecharge.modem.helper.Constant.API_SAVED_DOMAIN_LINK;
-import static com.dRecharge.modem.helper.Constant.D_N;
 import static com.dRecharge.modem.helper.Constant.getNextWord;
 import static com.dRecharge.modem.helper.Constant.getSim1Bal;
 import static com.dRecharge.modem.helper.Constant.getSim2Bal;
@@ -118,10 +122,11 @@ import static com.dRecharge.modem.helper.Session.SUBSCRIPTION_TRACKED;
 public class MainActivity extends AppCompatActivity {
     private static final String DEFAULT_HOME_TITLE = "dRecharge";
     private static final String DEFAULT_HOME_SUBTITLE = "Modem Service";
+    private static final long POLL_INITIAL_DELAY_MS = 1000L;
     private ActivityMainBinding activityMainBinding;
     private HashMap<String, HashSet<String>> map;
     private Session session;
-    private static MainActivity ins;
+    private static WeakReference<MainActivity> insRef;
     private String sim_number, op_code, op;
     String TAG = "TAG_ACC";
     String dialCodeLoad = null;
@@ -162,10 +167,10 @@ public class MainActivity extends AppCompatActivity {
     private Runnable safetyTimeoutRunnable2 = null;
     private static final long REQUEST_SAFETY_TIMEOUT_MS = 60000; // 60s: covers USSD timeout(25s) + longest multi-step chain
 
-    Handler handler = new Handler();
-    Timer simOneExe, simTwoExe, screenExe;
-    Runnable simOneRunable, simTwoRunable, screenRunnable;
-    TimerTask _simOneWorker, _simTwoWorker, _screenOn;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    Timer simOneExe, simTwoExe;
+    Runnable simOneRunable, simTwoRunable;
+    TimerTask _simOneWorker, _simTwoWorker;
 
 
     int timeInterval = 30000; // ডিফল্ট: 30000 মিলিসেকেন্ড = 30 সেকেন্ড (অন্য কাজের জন্য ব্যবহৃত)
@@ -213,7 +218,7 @@ public class MainActivity extends AppCompatActivity {
         if (getSupportActionBar() != null) getSupportActionBar().hide();
 
         activityMainBinding = DataBindingUtil.setContentView(this, R.layout.activity_main);
-        ins = this;
+        insRef = new WeakReference<>(this);
         contextOfApplication = getApplicationContext();
         session = new Session(MainActivity.this);
         loadingDialog = new LoadingDialog(MainActivity.this);
@@ -248,14 +253,15 @@ public class MainActivity extends AppCompatActivity {
         reloadHomeFromSession();
 
 
-        screenExe = new Timer();
-        screenExe.schedule(screenOn(), 0, 15000);
+        // Keep screen on while the app is in the foreground (replaces the empty-Toast timer hack)
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         if (activityMainBinding != null && session != null) {
+            restartPollingTimers();
             refreshServerRepository();
             SubscriptionCheckScheduler.scheduleNextDailyCheck(this);
             refreshSubscriptionState(false);
@@ -268,26 +274,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        stopPollingTimers();
         subscriptionCheckHandler.removeCallbacks(dailySubscriptionCheckRunnable);
     }
 
-    private TimerTask screenOn() {
-        _screenOn = new TimerTask() {
-            @Override
-            public void run() {
-                handler.post(screenRunnable = new Runnable() {
-                    @Override
-                    public void run() {
-                        Toast.makeText(MainActivity.this, "", Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
-        };
-        return _screenOn;
-    }
-
     public static MainActivity getMainActivityInstance() {
-        return ins;
+        return insRef != null ? insRef.get() : null;
     }
 
     private void openSettingsScreen() {
@@ -330,6 +322,55 @@ public class MainActivity extends AppCompatActivity {
         if (activityMainBinding != null) {
             activityMainBinding.countdownTv.setText("Next: 00:00");
         }
+    }
+
+    private void restartPollingTimers() {
+        stopPollingTimers();
+        if (session == null) {
+            return;
+        }
+
+        boolean hasSim1Config = session.isSim1Valid() || !session.getActiveServicesForSim(1).isEmpty();
+        if (hasSim1Config) {
+            simOneExe = new Timer("sim1-poll", true);
+            simOneExe.schedule(simOneSchedule(), POLL_INITIAL_DELAY_MS, getTimerTime());
+        }
+
+        boolean hasSim2Config = session.isSim2Valid() || !session.getActiveServicesForSim(2).isEmpty();
+        if (hasSim2Config) {
+            simTwoExe = new Timer("sim2-poll", true);
+            simTwoExe.schedule(simTwoSchedule(), POLL_INITIAL_DELAY_MS, getTimerTime());
+        }
+
+        if (hasSim1Config || hasSim2Config) {
+            nextFetchAtMs = System.currentTimeMillis() + POLL_INITIAL_DELAY_MS;
+            refreshCountdownState();
+        } else {
+            stopCountdown();
+        }
+    }
+
+    private void stopPollingTimers() {
+        if (simOneExe != null) {
+            simOneExe.cancel();
+            simOneExe.purge();
+            simOneExe = null;
+        }
+        if (simTwoExe != null) {
+            simTwoExe.cancel();
+            simTwoExe.purge();
+            simTwoExe = null;
+        }
+        if (simOneRunable != null) {
+            handler.removeCallbacks(simOneRunable);
+            simOneRunable = null;
+        }
+        if (simTwoRunable != null) {
+            handler.removeCallbacks(simTwoRunable);
+            simTwoRunable = null;
+        }
+        _simOneWorker = null;
+        _simTwoWorker = null;
     }
 
     private void reloadHomeFromSession() {
@@ -611,9 +652,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public boolean isAccessServiceEnabled(Context context, Class accessibilityServiceClass) {
-        String prefString = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-
-        return prefString != null && prefString.contains(context.getPackageName() + "/" + accessibilityServiceClass.getName());
+        return com.dRecharge.modem.ussd.AccessibilityUtils.isAccessibilityFullyEnabled(context, accessibilityServiceClass);
     }
 
     /**
@@ -644,8 +683,6 @@ public class MainActivity extends AppCompatActivity {
                 interval = 30; // যদি 1 সেকেন্ডের কম হয়, 30 সেকেন্ড সেট করবে
             }
         }catch(Exception e){
-            Log.e("USD_TIMER", "Error:1 " + interval);
-
         }
         return interval * 1000L; // সেকেন্ডকে মিলিসেকেন্ডে কনভার্ট করে (30 * 1000 = 30000ms)
     }
@@ -700,6 +737,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        if (!isNetworkAvailable()) {
+            isSubscriptionValid = false;
+            renderSubscriptionFailureState(host, "No internet connection");
+            return;
+        }
+
         isSubscriptionCheckInProgress = true;
         renderSubscriptionCheckingState(host);
 
@@ -718,9 +761,28 @@ public class MainActivity extends AppCompatActivity {
                 String failureMessage = defaultIfEmpty(throwable == null ? "" : throwable.getMessage(),
                         "Subscription check failed");
                 renderSubscriptionFailureState(host, failureMessage);
-                Log.e("USD_SUBSCRIPTION", "Subscription check failed", throwable);
             }
         });
+    }
+
+    private boolean isNetworkAvailable() {
+        ConnectivityManager connectivityManager =
+                (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) {
+            return false;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Network network = connectivityManager.getActiveNetwork();
+            if (network == null) {
+                return false;
+            }
+            NetworkCapabilities capabilities = connectivityManager.getNetworkCapabilities(network);
+            return capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        }
+
+        NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
+        return networkInfo != null && networkInfo.isConnected();
     }
 
     private void storeSubscriptionState(String host, SingleDomainResponse response) {
@@ -790,8 +852,8 @@ public class MainActivity extends AppCompatActivity {
         updateSubscriptionRefreshState(false);
         renderSubscriptionBadge(
                 "SETUP",
-                ContextCompat.getColor(this, R.color.inactive_bg),
-                ContextCompat.getColor(this, R.color.inactive_grey),
+                ThemeManager.getThemeColor(this, R.attr.colorInactiveBg),
+                ThemeManager.getThemeColor(this, R.attr.colorInactiveGrey),
                 "Add server domain",
                 "Subscription check is disabled");
     }
@@ -825,8 +887,8 @@ public class MainActivity extends AppCompatActivity {
         String detail = expiryLabel.isEmpty() ? "Subscription expired" : "Expired on " + expiryLabel;
         renderSubscriptionBadge(
                 "EXPIRED",
-                R.color.error_bg,
-                R.color.error_text,
+                ContextCompat.getColor(this, R.color.error_bg),
+                ContextCompat.getColor(this, R.color.error_text),
                 detail,
                 joinSubscriptionMeta(host, formatSubscriptionStatus(status)));
     }
@@ -861,8 +923,8 @@ public class MainActivity extends AppCompatActivity {
 
         renderSubscriptionBadge(
                 "ACTIVE",
-                ContextCompat.getColor(this, R.color.active_bg),
-                ContextCompat.getColor(this, R.color.active_green),
+                ThemeManager.getThemeColor(this, R.attr.colorActiveBg),
+                ThemeManager.getThemeColor(this, R.attr.colorActiveGreen),
                 detail,
                 meta);
     }
@@ -872,8 +934,8 @@ public class MainActivity extends AppCompatActivity {
         String normalizedStatus = normalizeSubscriptionText(status);
         String normalizedMessage = normalizeSubscriptionText(message);
         String badge = "INACTIVE";
-        int badgeBackgroundColor = ContextCompat.getColor(this, R.color.inactive_bg);
-        int badgeTextColor = ContextCompat.getColor(this, R.color.inactive_grey);
+        int badgeBackgroundColor = ThemeManager.getThemeColor(this, R.attr.colorInactiveBg);
+        int badgeTextColor = ThemeManager.getThemeColor(this, R.attr.colorInactiveGrey);
         String detail = "Subscription inactive";
 
         if (isDomainNotFoundStatus(normalizedStatus, normalizedMessage)) {
@@ -1324,7 +1386,6 @@ public class MainActivity extends AppCompatActivity {
                 activityMainBinding.minIntrval2Tv.setText("ইন্টারভাল: ডিফল্ট " + timeInterval / 1000 + " সেকেন্ড");
             }
         }catch (Exception e) {
-            Log.e("USD_INFO", "Error:1 " + e.getMessage());
         }
 
         try{
@@ -1358,18 +1419,8 @@ public class MainActivity extends AppCompatActivity {
                 activityMainBinding.Sim1Layout.setVisibility(View.VISIBLE);
                 activityMainBinding.sim1Status.setVisibility(View.GONE);
                 activityMainBinding.sim1Tv.setText(sim1 + "  | " + sim1Num + " | Id: " + sim1Id);
-
-                Log.d("USD_TIMER","timer init");
-                simOneExe = new Timer();
-                simOneExe.schedule(simOneSchedule(), 1000, getTimerTime());
-                nextFetchAtMs = System.currentTimeMillis() + 1000;
-                refreshCountdownState();
-            } else {
-                Log.d("USD_TIMER","SIM_DATA_NOT_FOUND");
             }
         }catch (Exception e) {
-            Log.e("USD_TIMER", "Error:2 " + e.getMessage());
-            Log.e("USD_TIMER", "Error: time " + getTimerTime());
         }
 
         try{
@@ -1398,15 +1449,11 @@ public class MainActivity extends AppCompatActivity {
                 activityMainBinding.Sim2Layout.setVisibility(View.VISIBLE);
                 activityMainBinding.sim2Status.setVisibility(View.GONE);
                 activityMainBinding.sim2Tv.setText(sim2 + "  | " + sim2Num + " | Id: " + sim2Id);
-
-                simTwoExe = new Timer();
-                simTwoExe.schedule(simTwoSchedule(), 1000, getTimerTime());
             }
         }catch (Exception e) {
-            Log.e("USD_TIMER", "Error:3 " + e.getMessage());
-            Log.e("USD_TIMER", "Error: time " + getTimerTime());
-
         }
+
+        restartPollingTimers();
 
     }
 
@@ -1424,7 +1471,6 @@ public class MainActivity extends AppCompatActivity {
                             return;
                         }
                         scheduleCountdown(getTimerTime());
-                        Log.d("USD_TIMER","timer is running");
                         List<ServiceConfig> cfgs = session.getActiveServicesForSim(1);
                         if (!cfgs.isEmpty()) {
                             for (ServiceConfig cfg : cfgs) {
@@ -1508,7 +1554,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         } catch (Exception e) {
-            System.out.println("====ED_TH: " + e);
         }
     }
 
@@ -1689,18 +1734,13 @@ public class MainActivity extends AppCompatActivity {
         activityMainBinding.service1Sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                Log.e("USD_SERVICE ::POSITION",adapterView.getItemAtPosition(i).toString());
-
                 String serviceName = String.valueOf(adapterView.getItemAtPosition(i));
                 if (!ServiceCatalog.SELECT_ONE.equals(serviceName)) {
                     int selectItem = adapterView.getSelectedItemPosition();
-                    Log.d("USD_SERVICE", String.valueOf(selectItem));
-                    Log.d("USD_SERVICE_NAME", serviceName);
                     session.setData(Session.SIM1_SERVICE, String.valueOf(selectItem));
                     session.setData(Session.SIM1_SERVICE_NAME, serviceName);
                     savedSim1Service = selectItem;
                     savedSim1ServiceName = serviceName;
-                    Log.d("USD_SERVICE_NAME :2", savedSim1ServiceName);
                     session.setData(SIM1_SERVICE_CODE, ServiceCatalog.getCodeForService(savedSim1ServiceName));
                 }
             }
@@ -1831,7 +1871,9 @@ public class MainActivity extends AppCompatActivity {
     //region Get New Pending Number
     public void getNewPending(String serviceName, String company, String simNumber, String simBal, String simSlotId, String simPin) {
         if (!ensureSubscriptionActive()) {
-            Log.w("USD_SUBSCRIPTION", "Blocked pending request fetch because subscription is inactive");
+            return;
+        }
+        if (!isNetworkAvailable()) {
             return;
         }
         if (!(activityMainBinding.status1Sw.isChecked()) && Objects.equals(simSlotId, String.valueOf(sim1Id))) {
@@ -1841,7 +1883,6 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         if (serverRepository == null) {
-            Log.e("USD_SERVER", "Server repository is not initialized");
             return;
         }
 
@@ -1849,7 +1890,6 @@ public class MainActivity extends AppCompatActivity {
         try {
             slotId = Integer.parseInt(simSlotId);
         } catch (NumberFormatException e) {
-            Log.e("USD_SERVER", "Invalid SIM slot: " + simSlotId, e);
             return;
         }
 
@@ -1900,7 +1940,6 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onFailure(Throwable throwable) {
-                        System.out.println("====PENDING ERR " + throwable);
                     }
 
                     @Override
@@ -2017,8 +2056,6 @@ public class MainActivity extends AppCompatActivity {
         String simPin = request.simPin;
 
         if (!looksLikeBdPhone(phone)) {
-            Log.e("USD_INFO", "Rejected request due to invalid phone. service=" + service
-                    + ", sid=" + sid + ", phone=" + request.phone + ", amount=" + request.amount);
             if (simSlotId == sim1Id) sim_number = session.getData(Session.SIM1_NUMBER);
             if (simSlotId == sim2Id) sim_number = session.getData(Session.SIM2_NUMBER);
             InsertNewPopUpMessage("Invalid phone number: " + request.phone, sid, "ValidationError", sim_number, simSlotId);
@@ -2027,16 +2064,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (!amount.matches("\\d+(\\.\\d+)?")) {
-            Log.e("USD_INFO", "Rejected request due to invalid amount. service=" + service
-                    + ", sid=" + sid + ", phone=" + request.phone + ", amount=" + request.amount);
             if (simSlotId == sim1Id) sim_number = session.getData(Session.SIM1_NUMBER);
             if (simSlotId == sim2Id) sim_number = session.getData(Session.SIM2_NUMBER);
             InsertNewPopUpMessage("Invalid amount: " + request.amount, sid, "ValidationError", sim_number, simSlotId);
             onRequestCompleted(simSlotId);
             return;
         }
-
-        System.out.println("====PROCESS_REQ: service=" + service + " phone=" + phone + " amount=" + amount + " pcode=" + pcode);
 
         // Load per-service config — USSD dial templates may be customized by the user
         ServiceConfig svcCfg = session.getServiceConfig(service);
@@ -2049,16 +2082,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // For single-step telecom services, use the custom template if one is configured.
-        // isPowerLoad bypasses this so packageLoadSent logic stays intact.
-        boolean isMobileBanking = service.contains("bKash") || service.contains("Roket") || service.contains("Nagad");
-        if (!isMobileBanking && !isPowerLoad) {
-            String tmpl = "0".equals(type) && !svcCfg.dialCode0.isEmpty()
-                          ? svcCfg.dialCode0 : svcCfg.dialCode1;
-            if (!tmpl.isEmpty()) {
-                singleStepUssd(applyDialTemplate(tmpl, phone, amount, simPin), sid, simSlotId);
-                return;
-            }
+        String customDialCode = buildCustomDialCode(svcCfg, type, phone, amount, simPin);
+        // A user-enabled custom USSD template should fully replace the built-in
+        // hardcoded dial path for every service type, including mobile banking.
+        if (!customDialCode.isEmpty()) {
+            singleStepUssd(customDialCode, sid, simSlotId);
+            return;
         }
 
         // সেবা অনুযায়ী প্রসেস করুন
@@ -2098,48 +2127,47 @@ public class MainActivity extends AppCompatActivity {
                 TaletalkLoadSend(sid, pcode, phone, amount, type, simSlotId, simPin);
                 break;
             case "bKash-Personal-SIM": {
-                String ic = svcCfg.dialCode1.isEmpty() ? "*247#" : svcCfg.dialCode1;
+                String ic = (svcCfg.customUssdEnabled && !svcCfg.dialCode1.isEmpty()) ? svcCfg.dialCode1 : "*247#";
                 if (pcode.equals("BKS")) bKashSendMoney(sid, phone, amount, simSlotId, simPin, ic);
                 if (pcode.equals("BKA")) bKashCashOut(sid, phone, amount, simSlotId, simPin, ic);
                 break;
             }
             case "bKash-Agent-SIM": {
-                String ic = svcCfg.dialCode1.isEmpty() ? "*247#" : svcCfg.dialCode1;
+                String ic = (svcCfg.customUssdEnabled && !svcCfg.dialCode1.isEmpty()) ? svcCfg.dialCode1 : "*247#";
                 if (pcode.equals("BK")) {
-                    System.out.println("====BK_CASHIN: phone=" + phone + " amount=" + amount + " (before call)");
                     bKashCashIn(sid, phone, amount, simSlotId, simPin, ic);
                 }
                 break;
             }
             case "Roket-Personal-SIM": {
-                String ic = svcCfg.dialCode1.isEmpty() ? "*322#" : svcCfg.dialCode1;
+                String ic = (svcCfg.customUssdEnabled && !svcCfg.dialCode1.isEmpty()) ? svcCfg.dialCode1 : "*322#";
                 if (pcode.equals("RKS")) RoketSendMoney(sid, phone, amount, simSlotId, simPin, ic);
                 if (pcode.equals("RKA")) RoketCashOut(sid, phone, amount, simSlotId, simPin, ic);
                 break;
             }
             case "Roket-Agent-SIM": {
-                String ic = svcCfg.dialCode1.isEmpty() ? "*322#" : svcCfg.dialCode1;
+                String ic = (svcCfg.customUssdEnabled && !svcCfg.dialCode1.isEmpty()) ? svcCfg.dialCode1 : "*322#";
                 if (pcode.equals("RK")) RoketCashIn(sid, phone, amount, simSlotId, simPin, ic);
                 break;
             }
             case "Nagad-Personal-SIM": {
-                String ic = svcCfg.dialCode1.isEmpty() ? "*167#" : svcCfg.dialCode1;
+                String ic = (svcCfg.customUssdEnabled && !svcCfg.dialCode1.isEmpty()) ? svcCfg.dialCode1 : "*167#";
                 if (pcode.equals("NGA")) NagadCashOut(sid, phone, amount, simSlotId, simPin, ic);
                 if (pcode.equals("NGS")) NagadSendMoney(sid, phone, amount, simSlotId, simPin, ic);
                 break;
             }
             case "Nagad-Agent-SIM": {
-                String ic = svcCfg.dialCode1.isEmpty() ? "*167#" : svcCfg.dialCode1;
+                String ic = (svcCfg.customUssdEnabled && !svcCfg.dialCode1.isEmpty()) ? svcCfg.dialCode1 : "*167#";
                 if (pcode.equals("NG")) NagadCashIn(sid, phone, amount, simSlotId, simPin, ic);
                 break;
             }
             case "bKash-Load": {
-                String ic = svcCfg.dialCode1.isEmpty() ? "*247#" : svcCfg.dialCode1;
+                String ic = (svcCfg.customUssdEnabled && !svcCfg.dialCode1.isEmpty()) ? svcCfg.dialCode1 : "*247#";
                 bKashLoad(sid, pcode, phone, amount, simSlotId, simPin, ic);
                 break;
             }
             case "Nagad-Load": {
-                String ic = svcCfg.dialCode1.isEmpty() ? "*167#" : svcCfg.dialCode1;
+                String ic = (svcCfg.customUssdEnabled && !svcCfg.dialCode1.isEmpty()) ? svcCfg.dialCode1 : "*167#";
                 NagadLoad(sid, pcode, phone, amount, simSlotId, simPin, ic);
                 break;
             }
@@ -2196,6 +2224,21 @@ public class MainActivity extends AppCompatActivity {
                 .replace("{PIN}", pin);
     }
 
+    private String buildCustomDialCode(ServiceConfig config, String type, String phone, String amount, String pin) {
+        if (config == null || !config.customUssdEnabled) {
+            return "";
+        }
+
+        String template = "0".equals(type) && config.dialCode0 != null && !config.dialCode0.isEmpty()
+                ? config.dialCode0
+                : config.dialCode1;
+        if (template == null || template.trim().isEmpty()) {
+            return "";
+        }
+
+        return applyDialTemplate(template.trim(), phone, amount, pin);
+    }
+
     /** Dials a single-step USSD code, posts the response, and completes the request. */
     private void singleStepUssd(String dialCode, String sid, int simSlotId) {
         if (simSlotId == sim1Id) sim_number = session.getData(Session.SIM1_NUMBER);
@@ -2211,7 +2254,6 @@ public class MainActivity extends AppCompatActivity {
             }
             @Override
             public void over(String message) {
-                Log.e("USSD_ERROR", "singleStepUssd over: " + message);
                 onRequestCompleted(simSlotId);
             }
         });
@@ -2222,7 +2264,6 @@ public class MainActivity extends AppCompatActivity {
         Runnable r = new Runnable() {
             @Override
             public void run() {
-                Log.w("USD_QUEUE", "Safety timeout fired for SIM " + simSlotId + " - request never completed, resetting lock");
                 onRequestCompleted(simSlotId);
             }
         };
@@ -2244,6 +2285,9 @@ public class MainActivity extends AppCompatActivity {
     /** Fetches pending requests for all active services on the given SIM slot (1 or 2). */
     private void fetchPendingForSim(int simSlot) {
         if (!ensureSubscriptionActive()) {
+            return;
+        }
+        if (!isNetworkAvailable()) {
             return;
         }
         updateResultTv(simSlot == 1 ? sim1Id : sim2Id, "Searching...");
@@ -2270,10 +2314,6 @@ public class MainActivity extends AppCompatActivity {
 
     //region All SIM Balance Query
     private void queryForSetSimWithBalance(String savedSimServiceName, String simNumber, String simPin, int simId) {
-        Log.d("USD_INFO", savedSimServiceName );
-        Log.d("USD_INFO", simNumber );
-        Log.d("USD_INFO", simPin );
-//        Log.d("USD_INFO_SIM", simId.t );
         switch (savedSimServiceName) {
             case "Grameen":
                 getGrameenLoadBalance(simNumber, simPin, simId);
@@ -2388,7 +2428,6 @@ public class MainActivity extends AppCompatActivity {
         if (type.equals("0")) {
             phonecodedial = "*8383*3*" + phone + "*" + amount + "*" + simPin + "#";
         }
-        System.out.println("Phonecode " + phonecodedial);
         ussdApi.callUSSDInvoke(phonecodedial, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
@@ -2401,7 +2440,6 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-                Log.e("USSD_ERROR", "RobiLoadSent Error: " + message);
                 Toast.makeText(MainActivity.this, "USSD Error: " + message, Toast.LENGTH_LONG).show();
                 // Error হলে প্রসেসিং ফ্ল্যাগ রিসেট করুন এবং পরবর্তী রিকোয়েস্ট প্রসেস করুন
                 // Reset processing flag on error and process next request
@@ -2451,7 +2489,6 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-                Log.e("USSD_ERROR", "AirtelLoadSent Error: " + message);
                 Toast.makeText(MainActivity.this, "USSD Error: " + message, Toast.LENGTH_LONG).show();
                 // Error হলে প্রসেসিং ফ্ল্যাগ রিসেট করুন এবং পরবর্তী রিকোয়েস্ট প্রসেস করুন
                 // Reset processing flag on error and process next request
@@ -2523,7 +2560,6 @@ public class MainActivity extends AppCompatActivity {
         }
         // GP: Replace 121*4# with 121*7#
         phonecodedial = phonecodedial.replace("121*4#", "121*7#").replace("*121*4#", "*121*7#");
-        System.out.println("===phonecode " + phonecodedial);
         ussdApi.callUSSDInvoke(phonecodedial, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
@@ -2536,7 +2572,6 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-                Log.e("USSD_ERROR", "GrameenPhoneLoadSend Error: " + message);
                 Toast.makeText(MainActivity.this, "USSD Error: " + message, Toast.LENGTH_LONG).show();
                 // Error হলে প্রসেসিং ফ্ল্যাগ রিসেট করুন এবং পরবর্তী রিকোয়েস্ট প্রসেস করুন
                 // Reset processing flag on error and process next request
@@ -2605,7 +2640,6 @@ public class MainActivity extends AppCompatActivity {
             ussdApi.callUSSDInvoke("*247#", SimID, map, new USSDController.CallbackInvoke() {
                 @Override
                 public void responseInvoke(String message) {
-                    Log.d("_USD_ERROR_",message);
                     if (!message.isEmpty()) {
                         ussdSendForBalance(message, keyString, PinCode, SimID, ussdApi);
                     }
@@ -2613,7 +2647,6 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void over(String message) {
-                    Log.d("_USD_ERROR_"," Over: "+message);
                     callGetNewPendingAfterBalanceCheck(SimID);
                 }
             });
@@ -2726,31 +2759,25 @@ public class MainActivity extends AppCompatActivity {
     private void bKashCashIn(String flexiId, String phone, String amount, int simSlotId, String simPin, String initialCode) {
         // phone = actual mobile number, amount = actual taka value (normalised by processRequest)
         // Flow: *247# -> 1 (Cash In) -> phone (number) -> amount (taka) -> PIN
-        System.out.println("====BK_CASHIN_USSD: " + initialCode + " -> 1 -> number=" + phone + " -> taka=" + amount + " -> PIN=" + simPin);
         ussdApi.callUSSDInvoke(initialCode, simSlotId, map, new USSDController.CallbackInvoke() {
             @Override
             public void responseInvoke(String message) {
-                System.out.println("====BK_STEP1: dial *247# response=" + message);
                 // Step 1: Select Cash In (1)
                 ussdApi.send("1", new USSDController.CallbackMessage() {
                     @Override
                     public void responseMessage(String message) {
-                        System.out.println("====BK_STEP2: sent 1 (Cash In) response=" + message);
                         // Step 2: Enter mobile number
                         ussdApi.send(phone, new USSDController.CallbackMessage() {
                             @Override
                             public void responseMessage(String message) {
-                                System.out.println("====BK_STEP3: sent number=" + phone + " response=" + message);
                                 // Step 3: Enter amount/taka
                                 ussdApi.send(amount, new USSDController.CallbackMessage() {
                                     @Override
                                     public void responseMessage(String message) {
-                                        System.out.println("====BK_STEP4: sent taka=" + amount + " response=" + message);
                                         // Step 4: Enter PIN to complete
                                         ussdApi.send(simPin, new USSDController.CallbackMessage() {
                                             @Override
                                             public void responseMessage(String message) {
-                                                System.out.println("====BK_STEP5: sent PIN, final response=" + message);
                                                 String cleanMessage = message == null ? "" : message.replaceAll(System.lineSeparator(), " ").trim();
                                                 ussdApi.cancel();
                                                 if (simSlotId == sim1Id) {
@@ -2773,7 +2800,6 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void over(String message) {
-                System.out.println("====BK_OVER: USSD session ended early. msg=" + message);
                 // USSD session ended early - send result and complete request
                 String cleanMessage = message == null ? "" : message.replaceAll(System.lineSeparator(), " ").trim();
                 if (!cleanMessage.isEmpty()) {
@@ -3246,11 +3272,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void responseInvoke(String message) {
                 if (message.contains("Do you want to continue?")) {
-                    ussdApi.send("2", new USSDController.CallbackMessage() {
-                        @Override
-                        public void responseMessage(String message) {
-                            System.out.println("======SDDD: " + message);
-                            ussdApi.send("1", new USSDController.CallbackMessage() {
+                        ussdApi.send("2", new USSDController.CallbackMessage() {
+                            @Override
+                            public void responseMessage(String message) {
+                                ussdApi.send("1", new USSDController.CallbackMessage() {
                                 @Override
                                 public void responseMessage(String message) {
                                     ussdApi.send(phone, new USSDController.CallbackMessage() {
@@ -3553,27 +3578,20 @@ public class MainActivity extends AppCompatActivity {
     private void ussdSendForBalance(String msbody, String[] ussdMsg, String pinCode, int SimId, USSDApi ussdApi) {
 
         String sk = Constant.ussdCodeFindFromArray(msbody, ussdMsg);
-        Log.d("_USD_ERROR_"," sk: "+sk);
-        Log.d("_USD_ERROR_"," msbody: "+msbody);
-        Log.d("_USD_ERROR_"," ussdMsg: "+ussdMsg);
         if (!sk.isEmpty()) {
             ussdApi.send(sk, new USSDController.CallbackMessage() {
                 @Override
                 public void responseMessage(String message) {
-                    Log.d("_USD_ERROR_"," 1: "+message);
-                    Log.d("_USD_ERROR_"," 2: "+ussdMsg);
                     if (!message.isEmpty()) {
                         ussdSendForBalance(message, ussdMsg, pinCode, SimId, ussdApi);
                     }
                 }
             });
         } else {
-            System.out.println("=====msd " + msbody);
             String lower = msbody.toLowerCase();
             if (lower.contains("pin") || lower.contains("enter") || lower.contains("pincode")) {
                 // PIN prompt detected - send PIN to complete balance check
                 if (pinCode == null || pinCode.trim().isEmpty()) {
-                    Log.e("_USD_ERROR_", "PIN is empty, cannot complete balance check");
                     ussdApi.cancel();
                     callGetNewPendingAfterBalanceCheck(SimId);
                     return;
@@ -3619,7 +3637,6 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 // Unknown response - no matching menu item, no PIN prompt, no resume
                 // Cancel USSD and proceed to prevent SIM from getting stuck
-                Log.e("_USD_ERROR_", "Balance check: unknown response, cancelling. msg=" + msbody);
                 ussdApi.cancel();
                 callGetNewPendingAfterBalanceCheck(SimId);
             }
@@ -3631,11 +3648,12 @@ public class MainActivity extends AppCompatActivity {
     private void InsertNewPopUpMessage(String message, String st, String senderNum, String simNumber, int simSlot) {
         sim_number = "";
         if (!ensureSubscriptionActive()) {
-            Log.w("USD_SUBSCRIPTION", "Blocked message insert because subscription is inactive");
+            return;
+        }
+        if (!isNetworkAvailable()) {
             return;
         }
         if (serverRepository == null) {
-            Log.e("USD_SERVER", "Server repository is not initialized");
             return;
         }
 
@@ -3653,7 +3671,6 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onFailure(Throwable throwable) {
-                        Log.e("USD_SERVER", "Insert message failed", throwable);
                     }
                 });
     }
@@ -3661,7 +3678,6 @@ public class MainActivity extends AppCompatActivity {
 
     //region RecursiveUSSDDial
     private void packageLoadSent(String dialCodePre, String dialCodePost, String flexiId, String package_name, String phone, String amount, String type, int simSlotId, String simPin, String service) {
-        System.out.println("======PKG_NAME: " + package_name);
         String phonecodedial = "";
         if (simSlotId == sim1Id) {
             sim_number = session.getData(Session.SIM1_NUMBER);
@@ -3806,6 +3822,7 @@ public class MainActivity extends AppCompatActivity {
                 session.setData(Session.TIME_INTERVAL, timeEditText);
                 // timeInterval variable এ মিলিসেকেন্ডে সেভ করছে (যেমন: 30 * 1000 = 30000)
                 timeInterval = Integer.parseInt(timeEditText) * 1000;
+                restartPollingTimers();
                 Toast.makeText(MainActivity.this, "Time Interval Set Successfully", Toast.LENGTH_SHORT).show();
             }
         });
@@ -3851,32 +3868,20 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void finish() {
+        stopPollingTimers();
         super.finish();
-        if (screenExe != null) {
-            screenExe.cancel();
-        }
-        if (simOneExe != null) {
-            simOneExe.cancel();
-        }
-        if (simTwoExe != null) {
-            simTwoExe.cancel();
-        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        countdownHandler.removeCallbacks(countdownRunnable);
-        subscriptionCheckHandler.removeCallbacks(dailySubscriptionCheckRunnable);
-        if (screenExe != null) {
-            screenExe.cancel();
-        }
-        if (simOneExe != null) {
-            simOneExe.cancel();
-        }
-        if (simTwoExe != null) {
-            simTwoExe.cancel();
-        }
+        // Clear WeakReference so GC can reclaim this Activity immediately
+        insRef = null;
+        // Remove all pending handler callbacks to prevent leaks and use-after-destroy crashes
+        handler.removeCallbacksAndMessages(null);
+        countdownHandler.removeCallbacksAndMessages(null);
+        subscriptionCheckHandler.removeCallbacksAndMessages(null);
+        stopPollingTimers();
     }
 
     // রিকোয়েস্ট ডাটা ক্লাস - কিউতে রাখার জন্য
@@ -3972,6 +3977,3 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 }
-
-
-

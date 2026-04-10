@@ -14,17 +14,23 @@ public class ThemeManager {
     public static final int THEME_NEON_DARK = 0;      // Cyber Dark - Neon Cyan
     public static final int THEME_BANKING_GREEN = 1;   // Banking Green - bKash/Nagad style
     public static final int THEME_INDIGO_PRO = 2;      // Indigo Pro - Stripe/PayPal style
+    public static final int THEME_SOFT_WHITE = 3;      // Soft White - Clean minimal sky blue
+    public static final int THEME_PEARL_ROSE = 4;      // Pearl Rose - Warm soft white with rose
 
     public static final String[] THEME_NAMES = {
         "Cyber Dark",
         "Cash Green",
-        "Indigo Pro"
+        "Indigo Pro",
+        "Soft White",
+        "Pearl Rose"
     };
 
     public static final String[] THEME_DESCRIPTIONS = {
         "Modern crypto-banking dark theme with neon cyan",
         "Trusted banking style — bKash & Nagad vibe",
-        "Startup fintech — Stripe & PayPal style"
+        "Startup fintech — Stripe & PayPal style",
+        "Clean minimal light — sky blue on pure white",
+        "Warm cream & rose — soft complement to Soft White"
     };
 
     public static int getSelectedTheme(Context context) {
@@ -46,6 +52,12 @@ public class ThemeManager {
             case THEME_INDIGO_PRO:
                 activity.setTheme(R.style.AppTheme_IndigoPro);
                 break;
+            case THEME_SOFT_WHITE:
+                activity.setTheme(R.style.AppTheme_SoftWhite);
+                break;
+            case THEME_PEARL_ROSE:
+                activity.setTheme(R.style.AppTheme_PearlRose);
+                break;
             case THEME_BANKING_GREEN:
             default:
                 activity.setTheme(R.style.AppTheme_BankingGreen);
@@ -60,6 +72,10 @@ public class ThemeManager {
                 return R.style.AppTheme_NeonDark;
             case THEME_INDIGO_PRO:
                 return R.style.AppTheme_IndigoPro;
+            case THEME_SOFT_WHITE:
+                return R.style.AppTheme_SoftWhite;
+            case THEME_PEARL_ROSE:
+                return R.style.AppTheme_PearlRose;
             case THEME_BANKING_GREEN:
             default:
                 return R.style.AppTheme_BankingGreen;

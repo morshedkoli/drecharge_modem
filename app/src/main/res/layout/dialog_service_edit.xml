@@ -33,7 +33,7 @@
             android:layout_height="wrap_content"
             android:text="Configure service settings"
             android:textSize="12sp"
-            android:textColor="@color/teal_light"
+            android:textColor="?attr/colorTealLight"
             android:layout_marginTop="4dp"/>
 
     </LinearLayout>
@@ -56,7 +56,7 @@
             android:layout_height="wrap_content"
             android:text="Service Status"
             android:textSize="11sp"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/colorTextSecondary"
             android:textStyle="bold"
             android:letterSpacing="0.06"
             android:layout_marginBottom="8dp"/>
@@ -95,7 +95,7 @@
             android:layout_height="wrap_content"
             android:text="SIM Slot"
             android:textSize="11sp"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/colorTextSecondary"
             android:textStyle="bold"
             android:letterSpacing="0.06"
             android:layout_marginBottom="8dp"/>
@@ -134,7 +134,7 @@
             android:layout_height="wrap_content"
             android:text="Phone Number"
             android:textSize="11sp"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/colorTextSecondary"
             android:textStyle="bold"
             android:letterSpacing="0.06"
             android:layout_marginBottom="6dp"/>
@@ -149,7 +149,7 @@
             android:paddingEnd="14dp"
             android:textSize="14sp"
             android:textColor="?attr/colorOnSurface"
-            android:textColorHint="@color/text_hint"
+            android:textColorHint="?attr/colorTextHint"
             android:background="@drawable/bg_rounded_input"
             android:layout_marginBottom="14dp"/>
 
@@ -159,7 +159,7 @@
             android:layout_height="wrap_content"
             android:text="PIN"
             android:textSize="11sp"
-            android:textColor="@color/text_secondary"
+            android:textColor="?attr/colorTextSecondary"
             android:textStyle="bold"
             android:letterSpacing="0.06"
             android:layout_marginBottom="6dp"/>
@@ -174,7 +174,7 @@
             android:paddingEnd="14dp"
             android:textSize="14sp"
             android:textColor="?attr/colorOnSurface"
-            android:textColorHint="@color/text_hint"
+            android:textColorHint="?attr/colorTextHint"
             android:background="@drawable/bg_rounded_input"
             android:layout_marginBottom="14dp"/>
 
@@ -182,84 +182,88 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="@color/divider"
+            android:background="?attr/colorDivider"
             android:layout_marginBottom="14dp"/>
 
-        <!-- USSD Dial Code section -->
-        <TextView
+        <!-- USSD Dial Code section header with toggle -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="USSD DIAL CODE"
-            android:textSize="11sp"
-            android:textColor="?attr/colorPrimary"
-            android:textStyle="bold"
-            android:letterSpacing="0.06"
-            android:layout_marginBottom="4dp"/>
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="USSD DIAL CODE"
+                    android:textSize="11sp"
+                    android:textColor="?attr/colorPrimary"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06"/>
+
+                <TextView
+                    android:id="@+id/dialogUssdModeTv"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Using default"
+                    android:textSize="10sp"
+                    android:textColor="?attr/colorTextHint"
+                    android:layout_marginTop="2dp"/>
+
+            </LinearLayout>
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/dialogCustomUssdSw"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+
+        </LinearLayout>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Placeholders: {PHONE}  {AMOUNT}  {PIN}"
             android:textSize="11sp"
-            android:textColor="@color/text_hint"
+            android:textColor="?attr/colorTextHint"
             android:fontFamily="monospace"
             android:layout_marginBottom="12dp"/>
 
-        <TextView
+        <!-- USSD fields container — enabled/disabled by the toggle above -->
+        <LinearLayout
+            android:id="@+id/ussdFieldsContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Type 1 (Commission / Default)"
-            android:textSize="11sp"
-            android:textColor="@color/text_secondary"
-            android:textStyle="bold"
-            android:letterSpacing="0.04"
-            android:layout_marginBottom="6dp"/>
+            android:orientation="vertical">
 
-        <EditText
-            android:id="@+id/dialogDialCode1Et"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:hint="e.g. *444*{PHONE}*{AMOUNT}*0*{PIN}#"
-            android:inputType="text"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:textSize="13sp"
-            android:fontFamily="monospace"
-            android:textColor="?attr/colorOnSurface"
-            android:textColorHint="@color/text_hint"
-            android:background="@drawable/bg_rounded_input"
-            android:layout_marginBottom="12dp"/>
+            <EditText
+                android:id="@+id/dialogDialCode1Et"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="e.g. *444*{PHONE}*{AMOUNT}*0*{PIN}#"
+                android:inputType="text"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorTextHint"
+                android:background="@drawable/bg_rounded_input"
+                android:layout_marginBottom="20dp"/>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Type 0 (Prepaid) — leave blank if same as above"
-            android:textSize="11sp"
-            android:textColor="@color/text_secondary"
-            android:textStyle="bold"
-            android:letterSpacing="0.04"
-            android:layout_marginBottom="6dp"/>
-
-        <EditText
-            android:id="@+id/dialogDialCode0Et"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:hint="e.g. *8383*3*{PHONE}*{AMOUNT}*{PIN}#"
-            android:inputType="text"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
-            android:textSize="13sp"
-            android:fontFamily="monospace"
-            android:textColor="?attr/colorOnSurface"
-            android:textColorHint="@color/text_hint"
-            android:background="@drawable/bg_rounded_input"
-            android:layout_marginBottom="20dp"/>
+        </LinearLayout>
 
         <!-- Divider -->
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:background="@color/divider"
+            android:background="?attr/colorDivider"
             android:layout_marginBottom="14dp"/>
 
         <!-- Schedule section -->
@@ -292,7 +296,7 @@
             android:layout_height="wrap_content"
             android:text="Auto enable/disable this service on a daily time window"
             android:textSize="11sp"
-            android:textColor="@color/text_hint"
+            android:textColor="?attr/colorTextHint"
             android:layout_marginBottom="12dp"/>
 
         <!-- Time row container — hidden when schedule switch is off -->
@@ -318,7 +322,7 @@
                     android:layout_weight="1"
                     android:text="Enable At"
                     android:textSize="13sp"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="?attr/colorTextSecondary"
                     android:textStyle="bold"/>
 
                 <TextView
@@ -329,7 +333,7 @@
                     android:hint="--:--"
                     android:textSize="15sp"
                     android:textColor="?attr/colorOnSurface"
-                    android:textColorHint="@color/text_hint"
+                    android:textColorHint="?attr/colorTextHint"
                     android:fontFamily="monospace"
                     android:background="@drawable/bg_rounded_input"/>
 
@@ -348,7 +352,7 @@
                     android:layout_weight="1"
                     android:text="Disable At"
                     android:textSize="13sp"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="?attr/colorTextSecondary"
                     android:textStyle="bold"/>
 
                 <TextView
@@ -359,7 +363,7 @@
                     android:hint="--:--"
                     android:textSize="15sp"
                     android:textColor="?attr/colorOnSurface"
-                    android:textColorHint="@color/text_hint"
+                    android:textColorHint="?attr/colorTextHint"
                     android:fontFamily="monospace"
                     android:background="@drawable/bg_rounded_input"/>
 
@@ -379,7 +383,7 @@
                 android:layout_height="48dp"
                 android:layout_weight="1"
                 android:text="Cancel"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/colorTextSecondary"
                 android:textSize="15sp"
                 android:textStyle="bold"
                 android:background="@drawable/bg_btn_cancel"

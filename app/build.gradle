@@ -2,6 +2,21 @@ plugins {
     id 'com.android.application'
 }
 
+def quoteBuildConfigValue = { value ->
+    def safe = (value ?: "").toString()
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+    return "\"${safe}\""
+}
+
+def resolveSecret = { propertyName, envName, fallback ->
+    return quoteBuildConfigValue(
+            project.findProperty(propertyName)
+                    ?: System.getenv(envName)
+                    ?: fallback
+    )
+}
+
 // Load keystore properties if available
 def keystorePropertiesFile = rootProject.file("keystore.properties")
 def keystoreProperties = new Properties()
@@ -21,6 +36,9 @@ android {
         versionName "1.0"
         multiDexEnabled = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "D_N", resolveSecret("drecharge.domainToken", "DRECHARGE_DOMAIN_TOKEN", "8qZ2BSujg7ifS2ZiVz2xS03rNVf0ak8B")
+        buildConfigField "String", "KEY", resolveSecret("drecharge.cryptoKey", "DRECHARGE_CRYPTO_KEY", "USSD_TUNNEL")
+        buildConfigField "String", "IV", resolveSecret("drecharge.cryptoIv", "DRECHARGE_CRYPTO_IV", "abcdefgh")
     }
 
     signingConfigs {
@@ -41,8 +59,12 @@ android {
     }
 
     buildTypes {
-        release {
+        debug {
             minifyEnabled false
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
         }
@@ -51,8 +73,9 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    dataBinding {
-        enabled = true
+    buildFeatures {
+        buildConfig true
+        dataBinding true
     }
 }
 
@@ -61,8 +84,15 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
 
+    // Encrypted SharedPreferences (for SIM PINs)
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
     implementation 'com.squareup.retrofit2:retrofit:2.11.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
+
+    // OkHttp with timeouts
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
 
     implementation 'androidx.constraintlayout:constraintlayout:2.2.1'
     implementation 'androidx.cardview:cardview:1.0.0'

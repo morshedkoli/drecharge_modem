@@ -124,6 +124,11 @@ public class PermissionActivity extends AppCompatActivity {
                     .apply();
             }
             updateUI();
+            // Auto-proceed if all required steps are now complete — the user shouldn't
+            // have to tap "Continue" after returning from the Accessibility Settings screen.
+            if (allSetupComplete()) {
+                goToMain();
+            }
         }
     }
 
@@ -222,10 +227,7 @@ public class PermissionActivity extends AppCompatActivity {
     }
 
     private boolean isAccessibilityEnabled() {
-        String pref = Settings.Secure.getString(
-            getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        return pref != null && pref.contains(
-            getPackageName() + "/" + USSDService.class.getName());
+        return com.dRecharge.modem.ussd.AccessibilityUtils.isAccessibilityFullyEnabled(this, USSDService.class);
     }
 
     private boolean hasOverlayPermission() {

@@ -19,6 +19,18 @@
         <item name="android:actionMenuTextColor">@android:color/white</item>
         <item name="colorControlNormal">@android:color/white</item>
         <item name="android:textColorPrimary">@android:color/white</item>
+        <!-- Custom dynamic color attrs (defaults to Banking Green palette) -->
+        <item name="colorTextSecondary">@color/text_secondary</item>
+        <item name="colorTextHint">@color/text_hint</item>
+        <item name="colorDivider">@color/divider</item>
+        <item name="colorLogText">@color/log_text</item>
+        <item name="colorInactiveGrey">@color/inactive_grey</item>
+        <item name="colorInactiveBg">@color/inactive_bg</item>
+        <item name="colorTealLight">@color/teal_light</item>
+        <item name="colorActiveGreen">@color/active_green</item>
+        <item name="colorActiveBg">@color/active_bg</item>
+        <item name="colorHeaderStart">@color/header_start</item>
+        <item name="colorHeaderEnd">@color/header_end</item>
     </style>
 
     <!-- ═══════════════════════════════════════════════════════════════
@@ -42,6 +54,18 @@
         <item name="colorOnSurface">@color/neon_text_primary</item>
         <item name="colorError">@color/neon_danger</item>
         <item name="colorSecondary">@color/neon_active_green</item>
+        <!-- Custom dynamic color attrs -->
+        <item name="colorTextSecondary">@color/neon_text_secondary</item>
+        <item name="colorTextHint">@color/neon_text_hint</item>
+        <item name="colorDivider">@color/neon_divider</item>
+        <item name="colorLogText">@color/neon_log_text</item>
+        <item name="colorInactiveGrey">@color/neon_inactive_grey</item>
+        <item name="colorInactiveBg">@color/neon_inactive_bg</item>
+        <item name="colorTealLight">@color/neon_teal_light</item>
+        <item name="colorActiveGreen">@color/neon_active_green</item>
+        <item name="colorActiveBg">@color/neon_active_bg</item>
+        <item name="colorHeaderStart">@color/neon_header_start</item>
+        <item name="colorHeaderEnd">@color/neon_header_end</item>
     </style>
 
     <style name="AppTheme.NeonDark.NoActionBar" parent="Theme.MaterialComponents.DayNight.NoActionBar">
@@ -73,6 +97,18 @@
         <item name="colorOnSurface">@color/green_text_primary</item>
         <item name="colorError">@color/green_danger</item>
         <item name="colorSecondary">@color/green_accent</item>
+        <!-- Custom dynamic color attrs -->
+        <item name="colorTextSecondary">@color/green_text_secondary</item>
+        <item name="colorTextHint">@color/green_text_hint</item>
+        <item name="colorDivider">@color/green_divider</item>
+        <item name="colorLogText">@color/green_log_text</item>
+        <item name="colorInactiveGrey">@color/green_inactive_grey</item>
+        <item name="colorInactiveBg">@color/green_inactive_bg</item>
+        <item name="colorTealLight">@color/green_teal_light</item>
+        <item name="colorActiveGreen">@color/green_active_green</item>
+        <item name="colorActiveBg">@color/green_active_bg</item>
+        <item name="colorHeaderStart">@color/green_header_start</item>
+        <item name="colorHeaderEnd">@color/green_header_end</item>
     </style>
 
     <style name="AppTheme.BankingGreen.NoActionBar" parent="Theme.MaterialComponents.Light.NoActionBar">
@@ -104,6 +140,18 @@
         <item name="colorOnSurface">@color/indigo_text_primary</item>
         <item name="colorError">@color/indigo_danger</item>
         <item name="colorSecondary">@color/indigo_active_green</item>
+        <!-- Custom dynamic color attrs -->
+        <item name="colorTextSecondary">@color/indigo_text_secondary</item>
+        <item name="colorTextHint">@color/indigo_text_hint</item>
+        <item name="colorDivider">@color/indigo_divider</item>
+        <item name="colorLogText">@color/indigo_log_text</item>
+        <item name="colorInactiveGrey">@color/indigo_inactive_grey</item>
+        <item name="colorInactiveBg">@color/indigo_inactive_bg</item>
+        <item name="colorTealLight">@color/indigo_teal_light</item>
+        <item name="colorActiveGreen">@color/indigo_active_green</item>
+        <item name="colorActiveBg">@color/indigo_active_bg</item>
+        <item name="colorHeaderStart">@color/indigo_header_start</item>
+        <item name="colorHeaderEnd">@color/indigo_header_end</item>
     </style>
 
     <style name="AppTheme.IndigoPro.NoActionBar" parent="Theme.MaterialComponents.DayNight.NoActionBar">
@@ -112,6 +160,90 @@
         <item name="colorAccent">@color/indigo_accent</item>
         <item name="android:windowBackground">@color/indigo_bg_screen</item>
         <item name="android:statusBarColor">@color/indigo_primary_dark</item>
+    </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         THEME 4: SOFT WHITE - Clean Minimal Light
+         Apple / modern fintech — sky blue accent on white
+         ═══════════════════════════════════════════════════════════════ -->
+    <style name="AppTheme.SoftWhite" parent="Theme.MaterialComponents.Light.DarkActionBar">
+        <item name="colorPrimary">@color/sw_primary</item>
+        <item name="colorPrimaryDark">@color/sw_primary_dark</item>
+        <item name="colorAccent">@color/sw_accent</item>
+        <item name="android:windowBackground">@color/sw_bg_screen</item>
+        <item name="android:statusBarColor">@color/sw_primary_dark</item>
+        <item name="elevationOverlayEnabled">true</item>
+        <item name="actionMenuTextColor">@android:color/white</item>
+        <item name="android:actionMenuTextColor">@android:color/white</item>
+        <item name="colorControlNormal">@android:color/white</item>
+        <item name="android:textColorPrimary">@android:color/white</item>
+        <item name="android:colorBackground">@color/sw_bg_screen</item>
+        <item name="colorSurface">@color/sw_surface</item>
+        <item name="colorOnSurface">@color/sw_text_primary</item>
+        <item name="colorError">@color/sw_danger</item>
+        <item name="colorSecondary">@color/sw_active_green</item>
+        <!-- Custom dynamic color attrs -->
+        <item name="colorTextSecondary">@color/sw_text_secondary</item>
+        <item name="colorTextHint">@color/sw_text_hint</item>
+        <item name="colorDivider">@color/sw_divider</item>
+        <item name="colorLogText">@color/sw_log_text</item>
+        <item name="colorInactiveGrey">@color/sw_inactive_grey</item>
+        <item name="colorInactiveBg">@color/sw_inactive_bg</item>
+        <item name="colorTealLight">@color/sw_teal_light</item>
+        <item name="colorActiveGreen">@color/sw_active_green</item>
+        <item name="colorActiveBg">@color/sw_active_bg</item>
+        <item name="colorHeaderStart">@color/sw_header_start</item>
+        <item name="colorHeaderEnd">@color/sw_header_end</item>
+    </style>
+
+    <style name="AppTheme.SoftWhite.NoActionBar" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/sw_primary</item>
+        <item name="colorPrimaryDark">@color/sw_primary_dark</item>
+        <item name="colorAccent">@color/sw_accent</item>
+        <item name="android:windowBackground">@color/sw_bg_screen</item>
+        <item name="android:statusBarColor">@color/sw_primary_dark</item>
+    </style>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         THEME 5: PEARL ROSE - Warm Soft White
+         Cream/pink — warm complement to Soft White
+         ═══════════════════════════════════════════════════════════════ -->
+    <style name="AppTheme.PearlRose" parent="Theme.MaterialComponents.Light.DarkActionBar">
+        <item name="colorPrimary">@color/pr_primary</item>
+        <item name="colorPrimaryDark">@color/pr_primary_dark</item>
+        <item name="colorAccent">@color/pr_accent</item>
+        <item name="android:windowBackground">@color/pr_bg_screen</item>
+        <item name="android:statusBarColor">@color/pr_primary_dark</item>
+        <item name="elevationOverlayEnabled">true</item>
+        <item name="actionMenuTextColor">@android:color/white</item>
+        <item name="android:actionMenuTextColor">@android:color/white</item>
+        <item name="colorControlNormal">@android:color/white</item>
+        <item name="android:textColorPrimary">@android:color/white</item>
+        <item name="android:colorBackground">@color/pr_bg_screen</item>
+        <item name="colorSurface">@color/pr_surface</item>
+        <item name="colorOnSurface">@color/pr_text_primary</item>
+        <item name="colorError">@color/pr_danger</item>
+        <item name="colorSecondary">@color/pr_active_green</item>
+        <!-- Custom dynamic color attrs -->
+        <item name="colorTextSecondary">@color/pr_text_secondary</item>
+        <item name="colorTextHint">@color/pr_text_hint</item>
+        <item name="colorDivider">@color/pr_divider</item>
+        <item name="colorLogText">@color/pr_log_text</item>
+        <item name="colorInactiveGrey">@color/pr_inactive_grey</item>
+        <item name="colorInactiveBg">@color/pr_inactive_bg</item>
+        <item name="colorTealLight">@color/pr_teal_light</item>
+        <item name="colorActiveGreen">@color/pr_active_green</item>
+        <item name="colorActiveBg">@color/pr_active_bg</item>
+        <item name="colorHeaderStart">@color/pr_header_start</item>
+        <item name="colorHeaderEnd">@color/pr_header_end</item>
+    </style>
+
+    <style name="AppTheme.PearlRose.NoActionBar" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/pr_primary</item>
+        <item name="colorPrimaryDark">@color/pr_primary_dark</item>
+        <item name="colorAccent">@color/pr_accent</item>
+        <item name="android:windowBackground">@color/pr_bg_screen</item>
+        <item name="android:statusBarColor">@color/pr_primary_dark</item>
     </style>
 
     <!-- ═══════════════════════════════════════════════════════════════

@@ -1,84 +1,86 @@
 package com.dRecharge.modem.helper;
 
-import android.annotation.SuppressLint;
-
-import java.security.SecureRandom;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Arrays;
 
 import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
+/**
+ * AES-128-ECB encryption helper.
+ *
+ * Fixes applied:
+ *  1. Removed use of the removed "Crypto" SecureRandom provider (crashed on Android 7+).
+ *  2. Fixed the HEX lookup table (was 44 chars → produced corrupted hex output).
+ *  3. Derive a deterministic 128-bit key from the seed via SHA-256 instead of the
+ *     deprecated SHA1PRNG/Crypto path.
+ */
 public class AESHelper {
+
+    private static final String HEX = "0123456789ABCDEF";
+
     public static String encrypt(String seed, String cleartext) throws Exception {
-        byte[] rawKey = getRawKey(seed.getBytes());
-        byte[] result = encrypt(rawKey, cleartext.getBytes());
+        byte[] rawKey = getRawKey(seed.getBytes(StandardCharsets.UTF_8));
+        byte[] result = encryptBytes(rawKey, cleartext.getBytes(StandardCharsets.UTF_8));
         return toHex(result);
     }
 
     public static String decrypt(String seed, String encrypted) throws Exception {
-        byte[] rawKey = getRawKey(seed.getBytes());
+        byte[] rawKey = getRawKey(seed.getBytes(StandardCharsets.UTF_8));
         byte[] enc = toByte(encrypted);
-        byte[] result = decrypt(rawKey, enc);
-        return new String(result);
+        byte[] result = decryptBytes(rawKey, enc);
+        return new String(result, StandardCharsets.UTF_8);
     }
 
+    /**
+     * Derives a 128-bit AES key from the seed using SHA-256.
+     * Replaces the removed SHA1PRNG/"Crypto" provider that crashed on Android 7+.
+     */
     private static byte[] getRawKey(byte[] seed) throws Exception {
-        KeyGenerator kgen = KeyGenerator.getInstance("AES");
-        @SuppressLint("DeletedProvider") SecureRandom sr = SecureRandom.getInstance("SHA1PRNG", "Crypto");
-        sr.setSeed(seed);
-        kgen.init(128, sr); // 192 and 256 bits may not be available
-        SecretKey skey = kgen.generateKey();
-        byte[] raw = skey.getEncoded();
-        return raw;
+        MessageDigest sha = MessageDigest.getInstance("SHA-256");
+        byte[] key = sha.digest(seed);
+        return Arrays.copyOf(key, 16); // 128-bit AES key
     }
 
-
-    private static byte[] encrypt(byte[] raw, byte[] clear) throws Exception {
+    private static byte[] encryptBytes(byte[] raw, byte[] clear) throws Exception {
         SecretKeySpec skeySpec = new SecretKeySpec(raw, "AES");
         Cipher cipher = Cipher.getInstance("AES");
         cipher.init(Cipher.ENCRYPT_MODE, skeySpec);
-        byte[] encrypted = cipher.doFinal(clear);
-        return encrypted;
+        return cipher.doFinal(clear);
     }
 
-    private static byte[] decrypt(byte[] raw, byte[] encrypted) throws Exception {
+    private static byte[] decryptBytes(byte[] raw, byte[] encrypted) throws Exception {
         SecretKeySpec skeySpec = new SecretKeySpec(raw, "AES");
         Cipher cipher = Cipher.getInstance("AES");
         cipher.init(Cipher.DECRYPT_MODE, skeySpec);
-        byte[] decrypted = cipher.doFinal(encrypted);
-        return decrypted;
+        return cipher.doFinal(encrypted);
     }
 
     public static String toHex(String txt) {
-        return toHex(txt.getBytes());
+        return toHex(txt.getBytes(StandardCharsets.UTF_8));
     }
 
     public static String fromHex(String hex) {
-        return new String(toByte(hex));
+        return new String(toByte(hex), StandardCharsets.UTF_8);
     }
 
     public static byte[] toByte(String hexString) {
         int len = hexString.length() / 2;
         byte[] result = new byte[len];
-        for (int i = 0; i < len; i++)
-            result[i] = Integer.valueOf(hexString.substring(2 * i, 2 * i + 2), 16).byteValue();
+        for (int i = 0; i < len; i++) {
+            result[i] = (byte) Integer.parseInt(hexString.substring(2 * i, 2 * i + 2), 16);
+        }
         return result;
     }
 
     public static String toHex(byte[] buf) {
-        if (buf == null)
-            return "";
-        StringBuffer result = new StringBuffer(2 * buf.length);
-        for (int i = 0; i < buf.length; i++) {
-            appendHex(result, buf[i]);
+        if (buf == null) return "";
+        StringBuilder result = new StringBuilder(2 * buf.length);
+        for (byte b : buf) {
+            result.append(HEX.charAt((b >> 4) & 0x0f));
+            result.append(HEX.charAt(b & 0x0f));
         }
         return result.toString();
-    }
-
-    private final static String HEX = "0123456789ABCDEFGHIJKLMLOPQRSTUVWXYZabcdefgh";
-
-    private static void appendHex(StringBuffer sb, byte b) {
-        sb.append(HEX.charAt((b >> 4) & 0x0f)).append(HEX.charAt(b & 0x0f));
     }
 }

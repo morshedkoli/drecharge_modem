@@ -4,7 +4,6 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
-import android.util.Log;
 
 public class InboxSMSDelete {
 
@@ -36,11 +35,6 @@ public class InboxSMSDelete {
                     String address = c.getString(2);
                     String body = c.getString(5);
                     String date = c.getString(3);
-                    Log.e("log>>>",
-                            "0--->" + c.getString(0) + " | 1---->" + c.getString(1)
-                                    + " | 2---->" + c.getString(2) + " | 3--->"
-                                    + c.getString(3) + " | 4----->" + c.getString(4)
-                                    + " | 5---->" + c.getString(5));
 
                     ContentValues values = new ContentValues();
                     values.put("read", true);
@@ -52,12 +46,10 @@ public class InboxSMSDelete {
                     context.getContentResolver().delete(
                             Uri.parse("content://sms/inbox"), "thread_id=?",
                             new String[] { c.getString(1) });
-                    Log.e("logDel>>>", "Delete success.........");
                     //}
                 } while (c.moveToNext());
             }
         } catch (Exception e) {
-            Log.e("log>>>", e.toString());
         }
     }
 
@@ -71,7 +63,6 @@ public class InboxSMSDelete {
                 String address = c.getString(2);
                 if (address.equals(number)) {
                     context.getContentResolver().delete(Uri.parse("content://sms/" + id), null, null);
-                    System.out.println("====del success " + number + " addrs: " + address + " id : " + id);
                 }
             }
         } catch (Exception e) {

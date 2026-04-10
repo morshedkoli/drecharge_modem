@@ -1,21 +1,59 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ─────────────────────────────────────────────────────────────
+# dRecharge Modem — ProGuard / R8 rules
+# ─────────────────────────────────────────────────────────────
+# Keep line numbers in crash stack traces
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# ── Accessibility Service ─────────────────────────────────────
+-keep class * extends android.accessibilityservice.AccessibilityService { *; }
+-keep class com.dRecharge.modem.ussd.** { *; }
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# ── Retrofit + OkHttp ─────────────────────────────────────────
+-dontwarn retrofit2.**
+-keep class retrofit2.** { *; }
+-keepattributes Signature
+-keepattributes Exceptions
+-keepattributes *Annotation*
+-keep,allowobfuscation interface * { @retrofit2.http.* <methods>; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-keep class okhttp3.** { *; }
+-keep interface okhttp3.** { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# ── Gson / JSON models ────────────────────────────────────────
+-keep class com.google.gson.** { *; }
+-keep class com.dRecharge.modem.apimodel.** { *; }
+-keep class com.dRecharge.modem.licenseapimodel.** { *; }
+-keepattributes SerializedName
+
+# ── Data Binding ──────────────────────────────────────────────
+-keep class androidx.databinding.** { *; }
+
+# ── App components ────────────────────────────────────────────
+-keep class com.dRecharge.modem.receiver.** { *; }
+-keep class com.dRecharge.modem.service.** { *; }
+-keep class com.dRecharge.modem.MainActivity { *; }
+-keep class com.dRecharge.modem.SplashActivity { *; }
+-keep class com.dRecharge.modem.PermissionActivity { *; }
+-keep class com.dRecharge.modem.SettingsActivity { *; }
+-keep class com.dRecharge.modem.helper.Session { *; }
+-keep class com.dRecharge.modem.helper.Constant { *; }
+-keep class com.dRecharge.modem.server.** { *; }
+-keep class com.dRecharge.modem.subscription.** { *; }
+
+# ── Lottie ────────────────────────────────────────────────────
+-dontwarn com.airbnb.lottie.**
+-keep class com.airbnb.lottie.** { *; }
+
+# ── AndroidX Security (EncryptedSharedPreferences) ────────────
+-keep class androidx.security.crypto.** { *; }
+-keep class com.google.crypto.tink.** { *; }
+-keep class com.dRecharge.modem.BuildConfig { *; }
+-dontwarn com.google.crypto.tink.**
+
+# ── Suppress common warnings ──────────────────────────────────
+-dontwarn javax.annotation.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**

@@ -57,7 +57,7 @@
                     android:layout_weight="1"
                     android:text="Not configured"
                     android:textSize="13sp"
-                    android:textColor="@color/text_hint"
+                    android:textColor="?attr/colorTextHint"
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:layout_marginEnd="12dp"/>

@@ -1,7 +1,6 @@
 package com.dRecharge.modem.ussd;
 
 import android.Manifest;
-import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
@@ -18,7 +17,8 @@ import android.provider.Settings;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
 import android.text.TextUtils;
-import android.view.accessibility.AccessibilityManager;
+// import android.view.accessibility.AccessibilityManager; // No longer needed after refactor
+import com.dRecharge.modem.ussd.AccessibilityUtils;
 import android.widget.Toast;
 
 import androidx.core.content.ContextCompat;
@@ -68,7 +68,8 @@ public class USSDController implements USSDInterface, USSDApi {
 
     private USSDController(Context context) {
         ussdInterface = this;
-        this.context = context;
+        // Always store Application context to prevent Activity memory leaks.
+        this.context = context.getApplicationContext();
     }
 
     /**
@@ -340,8 +341,13 @@ public class USSDController implements USSDInterface, USSDApi {
         }
     }
 
+    /**
+     * Verify that the app's Accessibility Service is enabled.
+     * Uses the robust {@link AccessibilityUtils#isAccessibilityFullyEnabled(Context, Class)}
+     * implementation. If the service is disabled, an appropriate UI prompt is shown.
+     */
     public static boolean verifyAccesibilityAccess(Context context) {
-        boolean isEnabled = USSDController.isAccessiblityServicesEnable(context);
+        boolean isEnabled = AccessibilityUtils.isAccessibilityFullyEnabled(context, USSDService.class);
         if (!isEnabled) {
             if (context instanceof Activity) {
                 openSettingsAccessibility((Activity) context);
@@ -369,8 +375,10 @@ public class USSDController implements USSDInterface, USSDApi {
         alertDialogBuilder.setCancelable(true);
         alertDialogBuilder.setNeutralButton("YES", new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int id) {
-                isAccessiblityServicesEnable(activity);
-                //activity.startActivityForResult(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS), 1);
+                // Direct the user to the Accessibility Settings screen.
+                Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(intent);
             }
         });
         AlertDialog alertDialog = alertDialogBuilder.create();
@@ -380,49 +388,8 @@ public class USSDController implements USSDInterface, USSDApi {
     }
 
 
-    protected static boolean isAccessiblityServicesEnable(Context context) {
-        AccessibilityManager am = (AccessibilityManager) context
-                .getSystemService(Context.ACCESSIBILITY_SERVICE);
-
-        if (am != null) {
-            for (AccessibilityServiceInfo service : am.getInstalledAccessibilityServiceList()) {
-                if (service.getId().contains(context.getPackageName())) {
-                    return USSDController.isAccessibilitySettingsOn(context, service.getId());
-                }
-            }
-        }
-        return false;
-    }
-
-    protected static boolean isAccessibilitySettingsOn(Context context, final String service) {
-        int accessibilityEnabled = 0;
-        try {
-            accessibilityEnabled = Settings.Secure.getInt(
-                    context.getApplicationContext().getContentResolver(),
-                    Settings.Secure.ACCESSIBILITY_ENABLED);
-        } catch (Settings.SettingNotFoundException e) {
-            //
-        }
-        if (accessibilityEnabled == 1) {
-            String settingValue = Settings.Secure.getString(
-                    context.getApplicationContext().getContentResolver(),
-                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-
-            if (settingValue != null) {
-                TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
-                splitter.setString(settingValue);
-
-                while (splitter.hasNext()) {
-                    String accessabilityService = splitter.next();
-//                    return true;
-                    if (!accessabilityService.equalsIgnoreCase(service)) {
-                    }
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
+    // The old custom checks have been replaced by AccessibilityUtils.
+    // Keeping the method signatures removed to avoid accidental usage.
 
     public interface CallbackInvoke {
         void responseInvoke(String message);

@@ -4,6 +4,9 @@ package com.dRecharge.modem.helper;
 import android.os.Build;
 import android.util.Base64;
 
+import com.dRecharge.modem.BuildConfig;
+
+import java.nio.charset.StandardCharsets;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -44,11 +47,11 @@ public class Constant {
     public static String getSim2Bal = "";
 
     public static String getUssdResponse = "";
-    public static String D_N = "8qZ2BSujg7ifS2ZiVz2xS03rNVf0ak8B";
+    public static final String D_N = BuildConfig.D_N;
     private static final String ALGORITHM = "Blowfish";
     private static final String MODE = "Blowfish/CBC/PKCS5Padding";
-    private static final String IV = "abcdefgh";
-    private static final String KEY= "USSD_TUNNEL";
+    private static final String IV = BuildConfig.IV;
+    private static final String KEY = BuildConfig.KEY;
 
     public static String getUSSDDialKey(String message, String SearchKey) {
         String getKey = null;
@@ -65,20 +68,15 @@ public class Constant {
                     newLine = lines[i];
                 }
                 digits = newLine.replaceAll("[^a-zA-Z0-9]", " ");
-                System.out.println("====lines " + lines[i]);
-                System.out.println("====digits " + digits);
 
                 sk = digits.split(" ");
                 for (int ii = 0; ii < sk.length; ii++) {
-                    System.out.println("===AMOUNT_KEY " + sk[ii]);
                     if (sk[ii].equals(SearchKey + "tk") || sk[ii].equals(SearchKey + " tk") || sk[ii].equals(SearchKey + "TK") || sk[ii].equals(SearchKey + " TK") || sk[ii].equals(SearchKey + "Tk") || sk[ii].equals(SearchKey + " Tk") || sk[ii].equals("TK" + SearchKey) || sk[ii].equals("TK " + SearchKey)) {
                         getKey = sk[0].replaceAll("[^0-9]", "").equals("0") ? null : sk[0].replaceAll("[^0-9]", "");
-                        System.out.println("===AMOUNT " + sk[ii]);
                     }
                 }
             }
         }
-        System.out.println("====GETKEY " + getKey);
         return getKey;
     }
 
@@ -99,7 +97,6 @@ public class Constant {
                 }
             }
         }
-        System.out.println("====GETKEYs==: " + getKey);
         return getKey;
     }
 
@@ -120,7 +117,6 @@ public class Constant {
                 }
             }
         }
-        System.out.println("====GETKEYd " + getKey);
         return getKey;
     }
 
@@ -208,16 +204,6 @@ public class Constant {
         if (getBal.equals("")) {
             getBal = GetStringInBetween("Bal: Tk", " ", message, false, false);
         }
-//        if (getBal.equals("")){
-//            Pattern p = Pattern.compile("(\\d+(?:\\.\\d+))");
-//            Matcher m = p.matcher(message);
-//            while(m.find()) {
-//                double d = Double.parseDouble(m.group(1));
-//                System.out.println("====DDS: "+d);
-//                return String.valueOf(d);
-//            }
-//        }
-
         return getBal;
     }
 
@@ -256,19 +242,19 @@ public class Constant {
 
 
     public static  String enc(String value ) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
-        SecretKeySpec secretKeySpec = new SecretKeySpec(KEY.getBytes(), ALGORITHM);
+        SecretKeySpec secretKeySpec = new SecretKeySpec(KEY.getBytes(StandardCharsets.UTF_8), ALGORITHM);
         Cipher cipher = Cipher.getInstance(MODE);
-        cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, new IvParameterSpec(IV.getBytes()));
-        byte[] values = cipher.doFinal(value.getBytes());
+        cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, new IvParameterSpec(IV.getBytes(StandardCharsets.UTF_8)));
+        byte[] values = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
         return Base64.encodeToString(values, Base64.DEFAULT);
     }
 
     public static  String decrypt(String value) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidAlgorithmParameterException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
         byte[] values = Base64.decode(value, Base64.DEFAULT);
-        SecretKeySpec secretKeySpec = new SecretKeySpec(KEY.getBytes(), ALGORITHM);
+        SecretKeySpec secretKeySpec = new SecretKeySpec(KEY.getBytes(StandardCharsets.UTF_8), ALGORITHM);
         Cipher cipher = Cipher.getInstance(MODE);
-        cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, new IvParameterSpec(IV.getBytes()));
-        return new String(cipher.doFinal(values));
+        cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, new IvParameterSpec(IV.getBytes(StandardCharsets.UTF_8)));
+        return new String(cipher.doFinal(values), StandardCharsets.UTF_8);
     }
 
 }

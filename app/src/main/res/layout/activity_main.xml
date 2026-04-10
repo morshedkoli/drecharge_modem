@@ -24,7 +24,7 @@
                     android:layout_height="36dp"
                     android:padding="6dp"
                     android:src="@drawable/ic_baseline_settings_applications_24"
-                    android:tint="#FFFFFF"
+                    android:tint="@android:color/white"
                     android:background="@drawable/bg_icon_btn_ripple"
                     android:clickable="true"
                     android:focusable="true"/>
@@ -43,7 +43,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="dRecharge"
-                        android:textColor="#FFFFFF"
+                        android:textColor="@android:color/white"
                         android:textSize="18sp"
                         android:textStyle="bold"
                         android:fontFamily="sans-serif-medium"
@@ -90,7 +90,7 @@
                 android:paddingTop="18dp"
                 android:paddingBottom="18dp"
                 android:text="No logo found"
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/colorTextSecondary"
                 android:textSize="14sp"
                 android:textStyle="bold"/>
 
@@ -106,7 +106,7 @@
             app:cardBackgroundColor="?attr/colorSurface"
             app:cardCornerRadius="14dp"
             app:cardElevation="2dp"
-            app:strokeColor="@color/divider"
+            app:strokeColor="?attr/colorDivider"
             app:strokeWidth="1dp">
 
             <LinearLayout
@@ -129,7 +129,7 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="Subscription"
-                        android:textColor="@color/text_secondary"
+                        android:textColor="?attr/colorTextSecondary"
                         android:textSize="11sp"
                         android:textStyle="bold"
                         android:letterSpacing="0.08"
@@ -146,13 +146,13 @@
                         android:focusable="true"
                         android:padding="7dp"
                         android:src="@drawable/ic_refresh_small"
-                        android:tint="@color/text_secondary" />
+                        android:tint="?attr/colorTextSecondary" />
 
                     <com.google.android.material.card.MaterialCardView
                         android:id="@+id/subscriptionBadgeCard"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        app:cardBackgroundColor="@color/inactive_bg"
+                        app:cardBackgroundColor="?attr/colorInactiveBg"
                         app:cardCornerRadius="999dp"
                         app:cardElevation="0dp">
 
@@ -165,7 +165,7 @@
                             android:paddingEnd="10dp"
                             android:paddingBottom="4dp"
                             android:text="CHECKING"
-                            android:textColor="@color/inactive_grey"
+                            android:textColor="?attr/colorInactiveGrey"
                             android:textSize="10sp"
                             android:textStyle="bold"/>
                     </com.google.android.material.card.MaterialCardView>
@@ -191,7 +191,7 @@
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:text="Add a server domain to enable checks"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="?attr/colorTextSecondary"
                     android:textSize="11sp"/>
 
             </LinearLayout>
@@ -257,7 +257,7 @@
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:background="@color/divider"/>
+                    android:background="?attr/colorDivider"/>
 
                 <ScrollView
                     android:layout_width="match_parent"
@@ -274,7 +274,7 @@
                             android:id="@+id/sim1ResutlRv"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textColor="@color/log_text"
+                            android:textColor="?attr/colorLogText"
                             android:textSize="12sp"
                             android:lineSpacingExtra="5dp"
                             android:fontFamily="monospace"
@@ -284,7 +284,7 @@
                             android:id="@+id/sim2ResutlRv"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:textColor="@color/log_text"
+                            android:textColor="?attr/colorLogText"
                             android:textSize="12sp"
                             android:lineSpacingExtra="5dp"
                             android:fontFamily="monospace"

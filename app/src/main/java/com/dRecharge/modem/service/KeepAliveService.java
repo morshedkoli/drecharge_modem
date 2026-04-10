@@ -8,14 +8,16 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Build;
 import android.os.IBinder;
 
 import androidx.core.app.NotificationCompat;
-import androidx.core.graphics.drawable.IconCompat;
 
 import com.dRecharge.modem.MainActivity;
 import com.dRecharge.modem.R;
+
+import java.lang.ref.WeakReference;
 
 public class KeepAliveService extends Service {
 
@@ -23,14 +25,14 @@ public class KeepAliveService extends Service {
     static final int NOTIFICATION_ID = 1001;
 
     /** Full-colour logo bitmap — shown as the large icon in the notification card. */
-    private static Bitmap logoColor = null;
+    private static WeakReference<Bitmap> logoColorRef = new WeakReference<>(null);
     /** White/alpha-only logo bitmap — used as the small status-bar icon. */
-    private static Bitmap logoWhite = null;
+    private static WeakReference<Bitmap> logoWhiteRef = new WeakReference<>(null);
 
     /** Called from MainActivity after the logo has been downloaded. */
     public static void setLogoBitmaps(Bitmap color, Bitmap white) {
-        logoColor = color;
-        logoWhite = white;
+        logoColorRef = new WeakReference<>(color);
+        logoWhiteRef = new WeakReference<>(white);
     }
 
     /** Re-posts the notification with the latest logo bitmaps. */
@@ -53,14 +55,14 @@ public class KeepAliveService extends Service {
                     .setPriority(NotificationCompat.PRIORITY_MIN)
                     .setSilent(true);
 
-            if (logoWhite != null) {
-                builder.setSmallIcon(IconCompat.createWithBitmap(logoWhite));
-            } else {
-                builder.setSmallIcon(R.mipmap.ic_launcher);
-            }
+            builder.setSmallIcon(R.drawable.ic_notification_drecharge);
 
-            if (logoColor != null) {
-                builder.setLargeIcon(logoColor);
+            Bitmap largeLogo = getCachedBitmap(logoColorRef);
+            if (largeLogo == null) {
+                largeLogo = getDefaultColorLogo(ctx);
+            }
+            if (largeLogo != null) {
+                builder.setLargeIcon(largeLogo);
             }
 
             nm.notify(NOTIFICATION_ID, builder.build());
@@ -107,17 +109,25 @@ public class KeepAliveService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_MIN)
                 .setSilent(true);
 
-        if (logoWhite != null) {
-            builder.setSmallIcon(IconCompat.createWithBitmap(logoWhite));
-        } else {
-            builder.setSmallIcon(R.mipmap.ic_launcher);
-        }
+        builder.setSmallIcon(R.drawable.ic_notification_drecharge);
 
-        if (logoColor != null) {
-            builder.setLargeIcon(logoColor);
+        Bitmap largeLogo = getCachedBitmap(logoColorRef);
+        if (largeLogo == null) {
+            largeLogo = getDefaultColorLogo(this);
+        }
+        if (largeLogo != null) {
+            builder.setLargeIcon(largeLogo);
         }
 
         return builder.build();
+    }
+
+    private static Bitmap getCachedBitmap(WeakReference<Bitmap> bitmapReference) {
+        return bitmapReference == null ? null : bitmapReference.get();
+    }
+
+    private static Bitmap getDefaultColorLogo(Context context) {
+        return BitmapFactory.decodeResource(context.getResources(), R.drawable.app_logo_square);
     }
 
     private void createChannel() {
