@@ -1871,7 +1871,6 @@ public class MainActivity extends AppCompatActivity {
         String type = request.type;
         String package_name = request.package_name;
         currentRequestPcode = request.pcode == null ? "" : request.pcode;
-        currentRequestSender = request.sender == null ? "" : request.sender;
         boolean isPowerLoad = request.isPowerLoad;
         int simSlotId = request.simSlotId;
         String simPin = request.simPin;
@@ -1894,6 +1893,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Load per-service config — USSD dial templates may be customized by the user
         ServiceConfig svcCfg = session.getServiceConfig(service);
+        currentRequestSender = (svcCfg.number != null && !svcCfg.number.trim().isEmpty())
+                ? svcCfg.number.trim()
+                : (request.sender == null ? "" : request.sender);
 
         // Honour the service's schedule: if the service is currently in its disabled window,
         // skip the request so it is not processed outside the configured time range.

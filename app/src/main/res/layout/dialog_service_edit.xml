@@ -128,11 +128,11 @@
                 android:buttonTint="?attr/colorPrimary"/>
         </RadioGroup>
 
-        <!-- Phone Number -->
+        <!-- Sender Number -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Phone Number"
+            android:text="Sender Number"
             android:textSize="11sp"
             android:textColor="?attr/colorTextSecondary"
             android:textStyle="bold"

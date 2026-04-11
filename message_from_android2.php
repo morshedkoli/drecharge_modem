@@ -1,5 +1,5 @@
 <?php 
-header('Content-Type:application/json');
+header('Contant-Type:application/json');
 include_once('../config/database.php');
  
 
@@ -48,23 +48,12 @@ if(!empty($msg)){
 	$reqamount = null;
 	$qtrxid    = null;
 	$simam     = null;
-	$status    = 0;
 
 	$flexi_amount = null;
 	$user_id = 0;
 	$reload_number = null;
 	$reload_id = 0;
 	$country_id = 0;
-	$parents_commission = array();
-	$requestUpdateSql = "";
-	$requestShouldRefund = false;
-	$requestShouldCreditCommission = false;
-	$requestHandledBySid = false;
-	$requestStatusResolved = null;
-	$requestTrxidResolved = null;
-	$requestSenderResolved = null;
-	$requestTopupNumberResolved = null;
-	$customerFailureMessage = null;
 
 	// if (preg_match("/".$vas."/", $msg )) {
 	// 	$response = [
@@ -413,13 +402,7 @@ if(!empty($msg)){
 			    if ($result['reload_code']=='SK') { 
 					$qtrxid= getStringBetween($msg, 'Transaction number ',' to recharge');  
 			    }
-			    $successTopupNumber = (!empty($slid) && !empty($sendcode)) ? $sendcode : $simno;
-			    $successUpdateSql = "UPDATE reload_sent_number SET status = '$status_r',topup_number='" . $conn->real_escape_string($successTopupNumber) . "',sim_balance='$simam', trxid='$qtrxid', statusCom = '$statusCom',remark='Automatic sent".$result['parents_commission']."'";
-			    if (!empty($sendcode) && reloadSentNumberHasColumn($conn, 'sender')) {
-			    	$successUpdateSql .= ", sender='" . $conn->real_escape_string($sendcode) . "'";
-			    }
-			    $successUpdateSql .= " WHERE id = '$reload_id'";
-			    $conn->query($successUpdateSql);
+			    $conn->query("UPDATE reload_sent_number SET status = '$status_r',topup_number='$simno',sim_balance='$simam', trxid='$qtrxid', statusCom = '$statusCom',remark='Automatic sent".$result['parents_commission']."' WHERE id = '$reload_id' ");
 			    if (count($parents_commission)>0) {
 			        foreach ($parents_commission as $key => $value) {
 			           // if ($value !== "0.00") {
@@ -442,121 +425,159 @@ if(!empty($msg)){
 	}
 	// recharge message execute end
 
-  	// explicit request completion/failure from Android app
-  	if (!empty($slid) && !empty($msg)) {
-  		$quryup = "SELECT * FROM `reload_sent_number` WHERE `id` = '$slid' AND `status`='Waiting' LIMIT 1";
+  	//flash message here
+  	if (!empty($slid) && !empty($msg) && $sendcode=="FlashMessage") {
+
+  		$quryup = "SELECT * FROM `reload_sent_number` WHERE `id` = '$slid'  AND `status`='Waiting'";
+
   		$querycount = $conn->query($quryup);
-  		if ($querycount && $querycount->num_rows > 0) {
-  			$result = $querycount->fetch_assoc();
-			$flexi_amount = $result['amount'];
-			$reload_id = $result['id'];
-			$country_id = $result['country_id'];
-			$reload_number = $result['reload_number'];
-			$user_id = $result['user_id'];
-			$parents_commission = json_decode($result['parents_commission'], true);
-			if (!is_array($parents_commission)) {
-				$parents_commission = array();
-			}
+  		  $parents_commission =array();
+		if ($querycount->num_rows>0) {
+			while ($result = $querycount->fetch_assoc()) {
+				$flexi_id = $result['id']; 
+				$ucid = $result['user_id']; 
+				$flexi_amount = $result['amount'];  
+				$reload_id = $result['id'];
+	            $country_id = $result['country_id'];
+	            $reload_number = $result['reload_number']; 
+	            $user_id = $result['user_id'];
+	             $parents_commission = json_decode($result['parents_commission'],true);
+	        }
+	        $flexi_amount = $flexi_amount;
+			$user_id = $user_id;
+			$reload_number = $reload_number;
+			$reload_id = $reload_id;
+			$country_id = $country_id;
+			$simno = $simno;
+			if ((strpos($msg,'Invalid bKash Account No.') !== false) OR
+				(strpos($msg,'The feature is not supported for this product.') !== false) OR 
+				(strpos($msg,'Payee limit exceeded.') !== false) OR
+				(strpos($msg,'Insufficient funds.') !== false) OR
+                (strpos($msg,'Transaction is not possible due to Limit') !== false) OR 
+                (strpos($msg,'The destination account is in a state which prohibits the execution of the transaction') !== false) OR 
+	
 
-			$requestHandledBySid = true;
-			$isRequestFailure = isAndroidRequestFailure($msg, $sendcode);
-			$requestTrxidResolved = !empty($qtrxid) ? $qtrxid : '';
-			$requestSenderResolved = trim((string)$sendcode);
-			$requestTopupNumberResolved = !empty($requestSenderResolved) ? $requestSenderResolved : $simno;
+				(strpos($msg,'Invalid account type for cash in.') !== false) OR 
+				(strpos($msg,'You do not have a registered Nagad account. Please visit nearest Nagad uddokta or call 16167.') !== false) OR
+				(strpos($msg,'Daily usage limit exceeded. Please try again later.') !== false) OR
+				(strpos($msg,'Insufficient balance. Please check and try again later.') !== false) OR
+				(strpos($msg,'Transaction not within limit. Please check and try again. Call 16167 for more information.') !== false) 
+				) 
+			{
+				
 
-			if ($isRequestFailure) {
-				$requestStatusResolved = 'Failed';
-				$customerFailureMessage = resolveAndroidFailureMessage($msg, $sendcode);
-				if (!empty($customerFailureMessage)) {
-					$requestTrxidResolved = $customerFailureMessage;
-				}
-				$requestShouldRefund = count($parents_commission) > 0;
-				$requestUpdateSql = "UPDATE reload_sent_number SET status = 'Failed', remark='Failed from android', trxid='" . $conn->real_escape_string($requestTrxidResolved) . "', topup_number='" . $conn->real_escape_string($requestTopupNumberResolved) . "', sim_balance='" . $conn->real_escape_string($simam) . "' WHERE id = '$reload_id'";
-			}
 
-			if (!empty($requestSenderResolved) && reloadSentNumberHasColumn($conn, 'sender')) {
-				$requestUpdateSql = str_replace(
-					" WHERE id = '$reload_id'",
-					", sender='" . $conn->real_escape_string($requestSenderResolved) . "' WHERE id = '$reload_id'",
-					$requestUpdateSql
-				);
+					
+
+					if((strpos($msg,'Invalid bKash Account No.') !== false) )
+					{
+						$custmsg ='দুঃখিত, এই নাম্বারে বিকাশ একাউন্ট নেই।'; //ye user ko msg show hoga
+					}
+
+					if((strpos($msg,'The feature is not supported for this product.') !== false) )
+					{
+						$custmsg ='দুঃখিত, এই নাম্বারটি এজেন্ট'; //ye user ko msg show hoga
+					} 
+
+					if((strpos($msg,'Payee limit exceeded.') !== false) )
+					{
+						$custmsg ='দুঃখিত, আপনার এই নাম্বারে লিমিট নেই।'; //ye user ko msg show hoga
+					} 
+
+					if((strpos($msg,'Insufficient funds.') !== false) )
+					{
+						$custmsg ='দুঃখিত, এজেন্টে ব্যালেন্স নেই।'; //ye user ko msg show hoga
+					} 
+
+					if((strpos($msg,'Transaction is not possible due to Limit') !== false) )
+					{
+						$custmsg ='দুঃখিত, এই নাম্বারে লিমিট নেই।'; //ye user ko msg show hoga
+					} 
+
+					if((strpos($msg,'The destination account is in a state which prohibits the execution of the transaction') !== false) )
+					{
+						$custmsg ='দুঃখিত, এই নাম্বারে লেনদেন করা সম্ভব নয়।'; //ye user ko msg show hoga
+					} 
+
+
+
+
+
+					if((strpos($msg,'Invalid account type for cash in.') !== false) )
+					{
+						$custmsg ='দুঃখিত, এই নাম্বারটি এজেন্ট'; //ye user ko msg show hoga
+					} 
+
+					if((strpos($msg,'You do not have a registered Nagad account. Please visit nearest Nagad uddokta or call 16167.') !== false) )
+					{
+						$custmsg ='দুঃখিত, এই নাম্বারে নগত একাউন্ট নেই।'; //ye user ko msg show hoga
+					}
+
+					if((strpos($msg,'Daily usage limit exceeded. Please try again later.') !== false) )
+					{
+						$custmsg ='দৈনিক ব্যবহারের সীমা অতিক্রম করেছে। অনুগ্রহ করে পরে আবার চেষ্টা করুন।'; //ye user ko msg show hoga
+					}
+
+					if((strpos($msg,'Insufficient balance. Please check and try again later.') !== false) )
+					{
+						$custmsg ='দুঃখিত, এজেন্টে ব্যালেন্স নেই।'; //ye user ko msg show hoga
+					}
+
+					if((strpos($msg,'Transaction not within limit. Please check and try again. Call 16167 for more information.') !== false) )
+					{
+						$custmsg ='দুঃখিত, এই নাম্বারে লিমিট নেই।'; //ye user ko msg show hoga
+					}
+				 $conn->query("UPDATE reload_sent_number SET status = 'Failed' ,remark='Failed m f android ".count($parents_commission)."',trxid='$custmsg' WHERE id = '$reload_id' ");
+				 $pccount= count($parents_commission);
+                if (count($parents_commission)>0){
+                	 $conn->query("UPDATE reload_sent_number SET remark='Failed m f android inside if',trxid='$custmsg' WHERE id = '$reload_id' ");
+                	 $txt = '';
+                	 $i=0;
+                   foreach ($parents_commission as $key => $value) {
+                   	  $old_balance = get_user_balance($conn, $key);
+                       $new_balance = ($old_balance + $flexi_amount);
+                       $conn->query("INSERT INTO user_transaction VALUES (null, '$key', '$key', 'ReloadRefund','$reload_number','$flexi_amount','$old_balance','$new_balance', '$curDate')");
+                      $conn->query("UPDATE user SET balance = balance+'$flexi_amount' WHERE id ='$key'");
+                      
+                        $conn->query("UPDATE reload_sent_number SET remark='Automatic Refund' WHERE id = '$reload_id' ");
+
+                      
+                   }
+                   
+                }
 			}
-   		}
+		}
+			
   	}
+ 
+	$sql_q = "INSERT INTO sim_message_report VALUES(NULL,'$msg','$user_id','$flexi_amount','$reload_number','$reload_id','$curDate','$country_id','$simno')"; 
+	$sql_q = $conn->query($sql_q);
 
-	$insert = '0';
-	$inmsg = 'not insert';
-	$dbOk = true;
-	$requestDbOk = true;
-	$auxDbOk = true;
 
-	if (!empty($requestUpdateSql)) {
-		$conn->begin_transaction();
-		$requestDbOk = (bool)$conn->query($requestUpdateSql);
-
-		if ($requestDbOk && $requestShouldCreditCommission) {
-			foreach ($parents_commission as $key => $value) {
-				$old_balance = get_user_balance($conn, $key);
-				$new_balance = $old_balance + $value;
-				$requestDbOk = $requestDbOk && (bool)$conn->query("INSERT INTO user_transaction VALUES (null, '$key', '1', 'TopupCommission','$reload_number','$value','$old_balance','$new_balance', '$curDate')");
-				$requestDbOk = $requestDbOk && (bool)$conn->query("UPDATE user SET balance = balance+'$value' WHERE id ='$key'");
-			}
-		}
-
-		if ($requestDbOk && $requestShouldRefund) {
-			foreach ($parents_commission as $key => $value) {
-				$old_balance = get_user_balance($conn, $key);
-				$new_balance = ($old_balance + $flexi_amount);
-				$requestDbOk = $requestDbOk && (bool)$conn->query("INSERT INTO user_transaction VALUES (null, '$key', '$key', 'ReloadRefund','$reload_number','$flexi_amount','$old_balance','$new_balance', '$curDate')");
-				$requestDbOk = $requestDbOk && (bool)$conn->query("UPDATE user SET balance = balance+'$flexi_amount' WHERE id ='$key'");
-			}
-			if ($requestDbOk) {
-				$requestDbOk = $requestDbOk && (bool)$conn->query("UPDATE reload_sent_number SET remark='Automatic Refund', trxid='" . $conn->real_escape_string($requestTrxidResolved) . "' WHERE id = '$reload_id'");
-			}
-		}
-
-		if ($requestDbOk) {
-			$conn->commit();
-		} else {
-			$conn->rollback();
-		}
-	}
-
-	$escapedMsg = $conn->real_escape_string($msg);
-	$escapedFlexiAmount = $conn->real_escape_string((string)$flexi_amount);
-	$escapedReloadNumber = $conn->real_escape_string((string)$reload_number);
-	$escapedSimno = $conn->real_escape_string((string)$simno);
-	$escapedOperator = $conn->real_escape_string((string)$operator);
-	$escapedSimam = $conn->real_escape_string((string)$simam);
-
-	$sql_q = "INSERT INTO sim_message_report VALUES(NULL,'$escapedMsg','$user_id','$escapedFlexiAmount','$escapedReloadNumber','$reload_id','$curDate','$country_id','$escapedSimno')"; 
-	$auxDbOk = $auxDbOk && (bool)$conn->query($sql_q);
-
-	$simbalupdate = "UPDATE  `siminfo` SET `status` =  '1', `time` =  '$time', `date` =  '$create_date' WHERE  `siminfo`.`OwnNumber` ='$escapedSimno' AND Operator='$escapedOperator'"; 
-	$auxDbOk = $auxDbOk && (bool)$conn->query($simbalupdate);
+	$simbalupdate = "UPDATE  `siminfo` SET `status` =  '1', `time` =  '$time', `date` =  '$create_date' WHERE  `siminfo`.`OwnNumber` ='$simno' AND Operator='$operator'"; 
+	$conn->query($simbalupdate);
 
 	if(!empty($simam)) {
-		$simbalupdate2 = "UPDATE  `siminfo` SET `Balance` =  '$escapedSimam' WHERE  `siminfo`.`OwnNumber` ='$escapedSimno' AND Operator='$escapedOperator'"; 
-		$auxDbOk = $auxDbOk && (bool)$conn->query($simbalupdate2); 
+		$simbalupdate2 = "UPDATE  `siminfo` SET `Balance` =  '$simam' WHERE  `siminfo`.`OwnNumber` ='$simno' AND Operator='$operator'"; 
+		$sql = $conn->query($simbalupdate2); 
 	}
 
-	$dbOk = $requestDbOk && $auxDbOk;
-
-	if($dbOk) {
+	if($sql_q) {
 		$insert = '1';
 		$inmsg = "Message Is Successfuly Insert";
 		$allset = $reqnumber;
 	} else {
-		$inmsg = "insert failed";
+		$insert = '1';
+		$inmsg = "not insert";
 	}
 
 	$response = array(
 		"msg" => $inmsg,
 		"insert" => $insert,
-		"position" => !empty($requestStatusResolved) ? $requestStatusResolved : $status, 
+		"position" => $status, 
 		"check" => $simno, 
 		"simam" => $simam, 
-		"status" => $dbOk ? 1 : 0
+		"status" => 1
 	);
 
 } else {
@@ -619,144 +640,5 @@ function gp_new_message_method($message, $amount_start_char, $amount_end_char, $
     }
 
     return $result;
-}
-
-function isAndroidRequestFailure($message, $sendcode = '') {
-	if ($sendcode === 'ValidationError') {
-		return true;
-	}
-
-	$failureTexts = array(
-		'Invalid bKash Account No.',
-		'The feature is not supported for this product.',
-		'Payee limit exceeded.',
-		'Insufficient funds.',
-		'Transaction is not possible due to Limit',
-		'The destination account is in a state which prohibits the execution of the transaction',
-		'Invalid account type for cash in.',
-		'You do not have a registered Nagad account. Please visit nearest Nagad uddokta or call 16167.',
-		'Daily usage limit exceeded. Please try again later.',
-		'Insufficient balance. Please check and try again later.',
-		'Transaction not within limit. Please check and try again. Call 16167 for more information.',
-		'Invalid phone number:',
-		'Invalid amount:',
-		'No Package Found For This Number'
-	);
-
-	foreach ($failureTexts as $failureText) {
-		if (strpos($message, $failureText) !== false) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-function isAndroidRequestSuccess($message, $sendcode = '', $pcode = '') {
-	if (empty($message) || $sendcode === 'ValidationError') {
-		return false;
-	}
-
-	$normalized = strtolower($message);
-	$normalizedPcode = strtoupper(trim((string)$pcode));
-
-	if (in_array($normalizedPcode, array('BK', 'BKA', 'BKS', 'BKA,BKS', 'BKS,BKA'), true)) {
-		return strpos($normalized, 'successful.') !== false
-			|| (strpos($normalized, 'trxid') !== false && strpos($normalized, 'balance tk') !== false);
-	}
-
-	if (in_array($normalizedPcode, array('NG', 'NGA', 'NGS', 'NGA,NGS', 'NGS,NGA'), true)) {
-		return strpos($normalized, 'mobile recharge request received.') !== false
-			|| (strpos($normalized, 'txnid:') !== false && (strpos($normalized, 'balance:') !== false || strpos($normalized, 'bal:') !== false));
-	}
-
-	if (in_array($normalizedPcode, array('RK', 'RKA', 'RKS', 'RKA,RKS', 'RKS,RKA'), true)) {
-		return strpos($normalized, 'transferred to') !== false
-			|| (strpos($normalized, 'txnid:') !== false && strpos($normalized, 'balance') !== false);
-	}
-
-	$successTexts = array(
-		'successfully',
-		'successful.',
-		'is successful',
-		'received mobile recharge request of tk',
-		'received recharge request of tk',
-		'accepted'
-	);
-
-	foreach ($successTexts as $successText) {
-		if (strpos($normalized, $successText) !== false) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-function resolveAndroidFailureMessage($message, $sendcode = '') {
-	if ($sendcode === 'ValidationError') {
-		return $message;
-	}
-
-	if (strpos($message,'Invalid bKash Account No.') !== false) {
-		return 'দুঃখিত, এই নাম্বারে বিকাশ একাউন্ট নেই।';
-	}
-
-	if (strpos($message,'The feature is not supported for this product.') !== false) {
-		return 'দুঃখিত, এই নাম্বারটি এজেন্ট';
-	}
-
-	if (strpos($message,'Payee limit exceeded.') !== false) {
-		return 'দুঃখিত, আপনার এই নাম্বারে লিমিট নেই।';
-	}
-
-	if (strpos($message,'Insufficient funds.') !== false) {
-		return 'দুঃখিত, এজেন্টে ব্যালেন্স নেই।';
-	}
-
-	if (strpos($message,'Transaction is not possible due to Limit') !== false) {
-		return 'দুঃখিত, এই নাম্বারে লিমিট নেই।';
-	}
-
-	if (strpos($message,'The destination account is in a state which prohibits the execution of the transaction') !== false) {
-		return 'দুঃখিত, এই নাম্বারে লেনদেন করা সম্ভব নয়।';
-	}
-
-	if (strpos($message,'Invalid account type for cash in.') !== false) {
-		return 'দুঃখিত, এই নাম্বারটি এজেন্ট';
-	}
-
-	if (strpos($message,'You do not have a registered Nagad account. Please visit nearest Nagad uddokta or call 16167.') !== false) {
-		return 'দুঃখিত, এই নাম্বারে নগত একাউন্ট নেই।';
-	}
-
-	if (strpos($message,'Daily usage limit exceeded. Please try again later.') !== false) {
-		return 'দৈনিক ব্যবহারের সীমা অতিক্রম করেছে। অনুগ্রহ করে পরে আবার চেষ্টা করুন।';
-	}
-
-	if (strpos($message,'Insufficient balance. Please check and try again later.') !== false) {
-		return 'দুঃখিত, এজেন্টে ব্যালেন্স নেই।';
-	}
-
-	if (strpos($message,'Transaction not within limit. Please check and try again. Call 16167 for more information.') !== false) {
-		return 'দুঃখিত, এই নাম্বারে লিমিট নেই।';
-	}
-
-	return $message;
-}
-
-function reloadSentNumberHasColumn($conn, $columnName) {
-	static $columnCache = array();
-
-	if (isset($columnCache[$columnName])) {
-		return $columnCache[$columnName];
-	}
-
-	$escapedColumn = $conn->real_escape_string($columnName);
-	$query = "SHOW COLUMNS FROM `reload_sent_number` LIKE '" . $escapedColumn . "'";
-	$result = $conn->query($query);
-	$columnCache[$columnName] = $result && $result->num_rows > 0;
-
-	return $columnCache[$columnName];
 }
 ?>
