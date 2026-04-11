@@ -9,24 +9,26 @@ public class ServiceRequest {
     private final String amount;
     private final String type;
     private final String packageName;
+    private final String sender;
     private final boolean powerLoad;
     private final String status;
 
     public ServiceRequest(String sid, String pcode, String phone, String amount, String type,
-                          String packageName, boolean powerLoad, String status) {
+                          String packageName, String sender, boolean powerLoad, String status) {
         this.sid = safe(sid);
         this.pcode = safe(pcode);
         this.phone = safe(phone);
         this.amount = safe(amount);
         this.type = safe(type);
         this.packageName = safe(packageName);
+        this.sender = safe(sender);
         this.powerLoad = powerLoad;
         this.status = safe(status);
     }
 
     public static ServiceRequest from(GetPendingModel model) {
         if (model == null) {
-            return new ServiceRequest("", "", "", "", "", "", false, "");
+            return new ServiceRequest("", "", "", "", "", "", "", false, "");
         }
         return new ServiceRequest(
                 model.getSid(),
@@ -35,6 +37,7 @@ public class ServiceRequest {
                 model.getBalance(),
                 model.getType(),
                 model.getPackage_name(),
+                model.getSender(),
                 model.isPowerLoad(),
                 model.getStatus()
         );
@@ -62,6 +65,10 @@ public class ServiceRequest {
 
     public String getPackageName() {
         return packageName;
+    }
+
+    public String getSender() {
+        return sender;
     }
 
     public boolean isPowerLoad() {

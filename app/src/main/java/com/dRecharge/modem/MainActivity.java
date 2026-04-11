@@ -125,6 +125,8 @@ public class MainActivity extends AppCompatActivity {
     private Session session;
     private static WeakReference<MainActivity> insRef;
     private String sim_number, op_code, op;
+    private String currentRequestPcode = "";
+    private String currentRequestSender = "";
     String TAG = "TAG_ACC";
     String dialCodeLoad = null;
     String dialCodeType = "1";
@@ -1734,6 +1736,7 @@ public class MainActivity extends AppCompatActivity {
                                 request.getAmount(),
                                 request.getType(),
                                 request.getPackageName(),
+                                request.getSender(),
                                 request.isPowerLoad(),
                                 slotId,
                                 simPin,
@@ -1867,6 +1870,8 @@ public class MainActivity extends AppCompatActivity {
         String amount = normalizeAmountValue(request.amount);
         String type = request.type;
         String package_name = request.package_name;
+        currentRequestPcode = request.pcode == null ? "" : request.pcode;
+        currentRequestSender = request.sender == null ? "" : request.sender;
         boolean isPowerLoad = request.isPowerLoad;
         int simSlotId = request.simSlotId;
         String simPin = request.simPin;
@@ -3514,7 +3519,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        serverRepository.insertMessage(message, null, st, null, senderNum, simNumber,
+        serverRepository.insertMessage(message, null, st, currentRequestPcode, resolveRequestSender(senderNum), simNumber,
                 String.valueOf(simSlot), null, new ModemServerRepository.MessageInsertCallback() {
                     @Override
                     public void onSuccess(InsertMessageModel response) {
@@ -3805,6 +3810,18 @@ public class MainActivity extends AppCompatActivity {
         return normalized;
     }
 
+    private String resolveRequestSender(String senderNum) {
+        String normalized = senderNum == null ? "" : senderNum.trim();
+        if (normalized.isEmpty()
+                || "FlashMessage".equalsIgnoreCase(normalized)
+                || "ValidationError".equalsIgnoreCase(normalized)
+                || "bKashLoad".equalsIgnoreCase(normalized)
+                || "NagadLoad".equalsIgnoreCase(normalized)) {
+            return currentRequestSender == null ? "" : currentRequestSender.trim();
+        }
+        return normalized;
+    }
+
     //endregion Phone/Amount Helper Methods
 
     private static class RequestData {
@@ -3814,19 +3831,21 @@ public class MainActivity extends AppCompatActivity {
         String amount;
         String type;
         String package_name;
+        String sender;
         boolean isPowerLoad;
         int simSlotId;
         String simPin;
         String service;
 
         RequestData(String sid, String pcode, String phone, String amount, String type,
-                    String package_name, boolean isPowerLoad, int simSlotId, String simPin, String service) {
+                    String package_name, String sender, boolean isPowerLoad, int simSlotId, String simPin, String service) {
             this.sid = sid;
             this.pcode = pcode;
             this.phone = phone;
             this.amount = amount;
             this.type = type;
             this.package_name = package_name;
+            this.sender = sender;
             this.isPowerLoad = isPowerLoad;
             this.simSlotId = simSlotId;
             this.simPin = simPin;
