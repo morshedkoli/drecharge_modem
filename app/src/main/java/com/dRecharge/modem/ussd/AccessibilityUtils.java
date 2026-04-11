@@ -75,18 +75,15 @@ public final class AccessibilityUtils {
     }
 
     /**
-     * Combined check – returns {@code true} if any of the three detection layers confirms
-     * the service is active:
-     * <ol>
-     *   <li>Settings string (authoritative, may lag by a frame on some OEMs)</li>
-     *   <li>AccessibilityManager service list (live, no lag)</li>
-     *   <li>USSDService.isServiceConnected() – the service instance is in memory (most reliable
-     *       at runtime; only set after onServiceConnected fires)</li>
-     * </ol>
+     * Combined check – returns {@code true} if either authoritative source confirms the service
+     * is active. {@code USSDService.isServiceConnected()} is intentionally NOT included here:
+     * when the user disables the service in settings, both authoritative sources update
+     * immediately, but {@code serviceInstance} remains non-null until {@code onDestroy()} fires.
+     * Including it would mask the disabled state and prevent the app from redirecting the user
+     * back to the permission setup screen.
      */
     public static boolean isAccessibilityFullyEnabled(Context context, Class<?> serviceClass) {
         return isAccessibilityServiceEnabled(context, serviceClass)
-                || isAccessibilityEnabledFallback(context)
-                || USSDService.isServiceConnected();
+                || isAccessibilityEnabledFallback(context);
     }
 }

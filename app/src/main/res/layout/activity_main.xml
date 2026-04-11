@@ -296,36 +296,6 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ══ Hidden functional views — do not remove ══ -->
-        <Switch android:id="@+id/status1Sw"        android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"/>
-        <Switch android:id="@+id/status2Sw"        android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"/>
-        <Spinner android:id="@+id/service1Sp"      android:layout_width="1dp" android:layout_height="1dp"/>
-        <Spinner android:id="@+id/service2Sp"      android:layout_width="1dp" android:layout_height="1dp"/>
-        <TextView android:id="@+id/sim1Tv"         android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/sim2Tv"         android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/getBal1Tv"      android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/getBal2Tv"      android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/pin1Tv"         android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/pin2Tv"         android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/minIntrval1Tv"  android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/minIntrval2Tv"  android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/minBal1Tv"      android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/minBal2Tv"      android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/sim1Status"     android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/sim2Status"     android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/receivedRq1Tv"  android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/receivedRq2Tv"  android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/sendReq1Tv"     android:layout_width="0dp" android:layout_height="0dp"/>
-        <TextView android:id="@+id/sendReq2Tv"     android:layout_width="0dp" android:layout_height="0dp"/>
-        <ImageView android:id="@+id/sim1SettingImg" android:layout_width="0dp" android:layout_height="0dp"/>
-        <ImageView android:id="@+id/sim2SettingImg" android:layout_width="0dp" android:layout_height="0dp"/>
-        <Switch android:id="@+id/pwLoadSim1"       android:layout_width="0dp" android:layout_height="0dp"/>
-        <Switch android:id="@+id/pwLoadSim2"       android:layout_width="0dp" android:layout_height="0dp"/>
-        <LinearLayout android:id="@+id/Sim1Layout"   android:layout_width="0dp" android:layout_height="0dp" android:orientation="vertical"/>
-        <LinearLayout android:id="@+id/Sim2Layout"   android:layout_width="0dp" android:layout_height="0dp" android:orientation="vertical"/>
-        <LinearLayout android:id="@+id/simId1Layout" android:layout_width="0dp" android:layout_height="0dp" android:orientation="vertical"/>
-        <LinearLayout android:id="@+id/simId2Layout" android:layout_width="0dp" android:layout_height="0dp" android:orientation="vertical"/>
-
     </LinearLayout>
 
 </layout>

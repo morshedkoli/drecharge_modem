@@ -471,15 +471,20 @@ public class USSDService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         serviceInstance = this;
+        // Only update event types/flags on the existing info object from the XML.
+        // Creating a new AccessibilityServiceInfo() and calling setServiceInfo() with it
+        // would wipe out canRetrieveWindowContent (and other XML-declared capabilities),
+        // which can cause the system to invalidate the service on some devices.
         AccessibilityServiceInfo info = getServiceInfo();
-        if (info == null) info = new AccessibilityServiceInfo();
-        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-                | AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED;
-        info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
-        info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-                | AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
-        setServiceInfo(info);
+        if (info != null) {
+            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                    | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                    | AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED;
+            info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
+            info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+                    | AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
+            setServiceInfo(info);
+        }
     }
 
     @Override

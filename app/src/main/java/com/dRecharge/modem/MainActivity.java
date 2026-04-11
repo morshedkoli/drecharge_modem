@@ -11,7 +11,6 @@ import androidx.core.content.ContextCompat;
 import androidx.databinding.DataBindingUtil;
 
 import android.Manifest;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -36,21 +35,20 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.Window;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.dRecharge.modem.apimodel.InsertMessageModel;
 import com.dRecharge.modem.databinding.ActivityMainBinding;
+import com.dRecharge.modem.helper.AppPermissionSupport;
 import com.dRecharge.modem.helper.Constant;
 import com.dRecharge.modem.helper.ServiceCatalog;
 import com.dRecharge.modem.helper.ServiceConfig;
 import com.dRecharge.modem.helper.Session;
 import com.dRecharge.modem.helper.ThemeManager;
+import com.dRecharge.modem.helper.UssdDialTemplateResolver;
 import com.dRecharge.modem.licenseapimodel.DomainSubscriptionStatus;
 import com.dRecharge.modem.licenseapimodel.SingleDomainResponse;
 import com.dRecharge.modem.receiver.SMSBReceiver;
@@ -80,7 +78,6 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.Timer;
@@ -121,9 +118,9 @@ import static com.dRecharge.modem.helper.Session.SUBSCRIPTION_TRACKED;
 
 public class MainActivity extends AppCompatActivity {
     private static final String DEFAULT_HOME_TITLE = "dRecharge";
-    private static final String DEFAULT_HOME_SUBTITLE = "Modem Service";
     private static final long POLL_INITIAL_DELAY_MS = 1000L;
     private ActivityMainBinding activityMainBinding;
+    private int appliedTheme;
     private HashMap<String, HashSet<String>> map;
     private Session session;
     private static WeakReference<MainActivity> insRef;
@@ -155,7 +152,8 @@ public class MainActivity extends AppCompatActivity {
     // Balance check tracking - Balance check শেষ হওয়ার পর request fetch করার জন্য
     private boolean isWaitingForBalanceCheckSim1 = false; // SIM1 এর জন্য balance check শেষ হওয়ার অপেক্ষা করছে কিনা
     private boolean isWaitingForBalanceCheckSim2 = false; // SIM2 এর জন্য balance check শেষ হওয়ার অপেক্ষা করছে কিনা
-    private boolean isSyncingSwitch = false; // Prevents balance check re-trigger during session restore
+    private boolean sim1Enabled = false;
+    private boolean sim2Enabled = false;
 
     // গ্লোবাল লক - একবারে শুধুমাত্র একটি SIM প্রসেস করবে
     // Global lock - Only one SIM will process at a time
@@ -173,7 +171,7 @@ public class MainActivity extends AppCompatActivity {
     TimerTask _simOneWorker, _simTwoWorker;
 
 
-    int timeInterval = 30000; // ডিফল্ট: 30000 মিলিসেকেন্ড = 30 সেকেন্ড (অন্য কাজের জন্য ব্যবহৃত)
+    int timeInterval = 60000; // ডিফল্ট: 60000 মিলিসেকেন্ড = 60 সেকেন্ড (অন্য কাজের জন্য ব্যবহৃত)
 
     // ── Countdown ──
     private final android.os.Handler countdownHandler = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -218,6 +216,7 @@ public class MainActivity extends AppCompatActivity {
         if (getSupportActionBar() != null) getSupportActionBar().hide();
 
         activityMainBinding = DataBindingUtil.setContentView(this, R.layout.activity_main);
+        appliedTheme = ThemeManager.getSelectedTheme(this);
         insRef = new WeakReference<>(this);
         contextOfApplication = getApplicationContext();
         session = new Session(MainActivity.this);
@@ -246,10 +245,6 @@ public class MainActivity extends AppCompatActivity {
         scheduleNextInAppSubscriptionCheck();
         getsSimServiceInfo();
         init();
-        simServiceSelect();
-        sim1Setting();
-        sim2Setting();
-        serviceOnOff();
         reloadHomeFromSession();
 
 
@@ -260,6 +255,18 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // If the accessibility service was disabled while we were away (e.g. user toggled it off
+        // in system settings, or Android auto-disabled it), send the user back to setup.
+        if (!isSetupComplete()) {
+            startActivity(new Intent(this, PermissionActivity.class));
+            finish();
+            return;
+        }
+        int selectedTheme = ThemeManager.getSelectedTheme(this);
+        if (selectedTheme != appliedTheme) {
+            recreate();
+            return;
+        }
         if (activityMainBinding != null && session != null) {
             restartPollingTimers();
             refreshServerRepository();
@@ -287,10 +294,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void toggleService() {
-        boolean anyOn = activityMainBinding.status1Sw.isChecked() || activityMainBinding.status2Sw.isChecked();
-        activityMainBinding.status1Sw.setChecked(!anyOn);
-        activityMainBinding.status2Sw.setChecked(!anyOn);
-        updatePowerButtonState(!anyOn);
+        boolean enableAll = !isAnyServiceEnabled();
+        setSim1Enabled(enableAll);
+        setSim2Enabled(enableAll);
     }
 
     private void updatePowerButtonState(boolean isOn) {
@@ -298,8 +304,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean isAnyServiceEnabled() {
-        return activityMainBinding != null
-                && (activityMainBinding.status1Sw.isChecked() || activityMainBinding.status2Sw.isChecked());
+        return sim1Enabled || sim2Enabled;
+    }
+
+    private boolean isSimEnabled(int simSlotId) {
+        if (simSlotId == sim1Id) {
+            return sim1Enabled;
+        }
+        if (simSlotId == sim2Id) {
+            return sim2Enabled;
+        }
+        return false;
     }
 
     private void scheduleCountdown(long delayMs) {
@@ -380,8 +395,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateSimConfigurationSummary() {
-        String intervalText = defaultIfEmpty(session.getData(Session.TIME_INTERVAL), "30");
-
         savedSim1Pin = session.getData(Session.SIM1_PIN);
         savedSim1Time = session.getData(Session.SIM1_TIME);
         savedSim1Bal = defaultIfEmpty(session.getData(Session.SIM1_MIN_BAL), "0");
@@ -389,12 +402,6 @@ public class MainActivity extends AppCompatActivity {
         savedSim1Service = safeParseInt(session.getData(Session.SIM1_SERVICE), 0);
         savedSim1ServiceName = session.getData(Session.SIM1_SERVICE_NAME);
         sim1Num = defaultIfEmpty(session.getData(Session.SIM1_NUMBER), sim1Num);
-        activityMainBinding.pin1Tv.setText("PIN: " + maskPin(savedSim1Pin));
-        activityMainBinding.minIntrval1Tv.setText("Interval: " + intervalText + " seconds");
-        activityMainBinding.minBal1Tv.setText("Balance Limit: " + savedSim1Bal);
-        if (activityMainBinding.service1Sp.getAdapter() != null) {
-            activityMainBinding.service1Sp.setSelection(ServiceCatalog.indexOf(savedSim1ServiceName));
-        }
 
         savedSim2Pin = session.getData(Session.SIM2_PIN);
         savedSim2Time = session.getData(Session.SIM2_TIME);
@@ -403,43 +410,18 @@ public class MainActivity extends AppCompatActivity {
         savedSim2Service = safeParseInt(session.getData(Session.SIM2_SERVICE), 0);
         savedSim2ServiceName = session.getData(Session.SIM2_SERVICE_NAME);
         sim2Num = defaultIfEmpty(session.getData(Session.SIM2_NUMBER), sim2Num);
-        activityMainBinding.pin2Tv.setText("PIN: " + maskPin(savedSim2Pin));
-        activityMainBinding.minIntrval2Tv.setText("Interval: " + intervalText + " seconds");
-        activityMainBinding.minBal2Tv.setText("Balance Limit: " + savedSim2Bal);
-        if (activityMainBinding.service2Sp.getAdapter() != null) {
-            activityMainBinding.service2Sp.setSelection(ServiceCatalog.indexOf(savedSim2ServiceName));
-        }
 
         updateSimLabels();
     }
 
     private void updateSimLabels() {
-        activityMainBinding.sim1Tv.setText(buildSimLabel(sim1, sim1Num, sim1Id, savedSim1ServiceName));
-        activityMainBinding.sim2Tv.setText(buildSimLabel(sim2, sim2Num, sim2Id, savedSim2ServiceName));
-
-        boolean sim1Configured = session.isSim1Valid();
-        activityMainBinding.Sim1Layout.setVisibility(sim1Configured ? View.VISIBLE : View.GONE);
-        activityMainBinding.sim1Status.setVisibility(sim1Configured ? View.GONE : View.VISIBLE);
-
-        boolean sim2Configured = session.isSim2Valid();
-        activityMainBinding.simId2Layout.setVisibility((sim2Id >= 0 || sim2Configured) ? View.VISIBLE : View.GONE);
-        activityMainBinding.Sim2Layout.setVisibility(sim2Configured ? View.VISIBLE : View.GONE);
-        activityMainBinding.sim2Status.setVisibility(sim2Configured ? View.GONE : View.VISIBLE);
+        // The premium home screen no longer stores operational state in hidden placeholder views.
     }
 
     private void syncEnabledSwitchesFromSession() {
-        isSyncingSwitch = true;
-        activityMainBinding.status1Sw.setChecked(session.getBooleanData(Session.SIM1_ENABLED));
-        activityMainBinding.status2Sw.setChecked(session.getBooleanData(Session.SIM2_ENABLED));
-        isSyncingSwitch = false;
+        sim1Enabled = session.getBooleanData(Session.SIM1_ENABLED);
+        sim2Enabled = session.getBooleanData(Session.SIM2_ENABLED);
         refreshPowerButton();
-    }
-
-    private String buildSimLabel(String carrier, String number, int id, String serviceName) {
-        String safeCarrier = defaultIfEmpty(carrier, "SIM");
-        String safeNumber = defaultIfEmpty(number, "Not set");
-        String safeService = defaultIfEmpty(serviceName, "No service selected");
-        return safeCarrier + " | " + safeNumber + " | Slot: " + id + " | " + safeService;
     }
 
     private String defaultIfEmpty(String value, String fallback) {
@@ -454,36 +436,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private String maskPin(String pin) {
-        if (pin == null || pin.trim().isEmpty()) {
-            return "Not set";
-        }
-        return "****";
-    }
-
     //region Settings And Service
 
     private boolean isSetupComplete() {
-        // Check critical runtime permissions
-        String[] required = {
-            Manifest.permission.CALL_PHONE,
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.RECEIVE_SMS,
-            Manifest.permission.READ_SMS,
-            Manifest.permission.READ_CONTACTS,
-            Manifest.permission.GET_ACCOUNTS,
-        };
-        for (String p : required) {
-            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
-                return false;
-            }
+        if (!AppPermissionSupport.hasAllRuntimePermissions(this)) {
+            return false;
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                return false;
-            }
-            // Check restricted settings unlocked (required before accessibility on API 33+)
             if (!isRestrictedSettingsUnlocked()) {
                 return false;
             }
@@ -493,23 +452,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean isRestrictedSettingsUnlocked() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Try the AppOps check first (works on stock Android)
-            try {
-                android.app.AppOpsManager appOps =
-                    (android.app.AppOpsManager) getSystemService(APP_OPS_SERVICE);
-                int mode = appOps.checkOpNoThrow(
-                        "android:access_restricted_settings",
-                        android.os.Process.myUid(), getPackageName());
-                if (mode == android.app.AppOpsManager.MODE_ALLOWED) {
-                    return true;
-                }
-            } catch (Exception ignored) {}
-            // Fallback: check persisted state from PermissionActivity
-            return getSharedPreferences("dRechargePrefs", MODE_PRIVATE)
-                .getBoolean("restricted_settings_granted", false);
-        }
-        return true; // Not applicable below Android 13
+        if (AppPermissionSupport.isRestrictedSettingsUnlocked(this)) return true;
+        // Fallback: if the accessibility service is already running, restricted settings
+        // must have been granted at some point — mirrors PermissionActivity's logic so
+        // the two checks stay in sync on MIUI / ColorOS / other custom ROMs.
+        return isAccessServiceEnabled(getApplicationContext(), USSDService.class);
     }
 
     private void loadLogo() {
@@ -671,16 +618,16 @@ public class MainActivity extends AppCompatActivity {
      * @return long - interval time মিলিসেকেন্ডে (সেকেন্ড * 1000)
      */
     private long  getTimerTime(){
-        int interval = 30; // ডিফল্ট: 30 সেকেন্ড
+        int interval = 60; // ডিফল্ট: 60 সেকেন্ড
 
         try {
             String timeStr = session.getData(Session.TIME_INTERVAL);
             if(timeStr == null || timeStr.trim().isEmpty()){
-                timeStr = "30"; // যদি সেট না থাকে, 30 সেকেন্ড ব্যবহার করবে
+                timeStr = "60"; // যদি সেট না থাকে, 60 সেকেন্ড ব্যবহার করবে
             }
             interval = Integer.parseInt(timeStr);
             if(interval < 1){
-                interval = 30; // যদি 1 সেকেন্ডের কম হয়, 30 সেকেন্ড সেট করবে
+                interval = 60; // যদি 1 সেকেন্ডের কম হয়, 60 সেকেন্ড সেট করবে
             }
         }catch(Exception e){
         }
@@ -1138,15 +1085,11 @@ public class MainActivity extends AppCompatActivity {
         isProcessingSim1 = false;
         isProcessingSim2 = false;
         isAnySimProcessing = false;
-
-        if (activityMainBinding != null) {
-            if (activityMainBinding.status1Sw.isChecked()) {
-                activityMainBinding.status1Sw.setChecked(false);
-            }
-            if (activityMainBinding.status2Sw.isChecked()) {
-                activityMainBinding.status2Sw.setChecked(false);
-            }
-        }
+        sim1Enabled = false;
+        sim2Enabled = false;
+        session.setBooleanData(Session.SIM1_ENABLED, false);
+        session.setBooleanData(Session.SIM2_ENABLED, false);
+        refreshPowerButton();
     }
 
     private String extractDomainHost(String domain) {
@@ -1353,14 +1296,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void init() {
-
-
-
-
-
-
         try{
-            addListenerOnSpinnerItemSelection();
             int MyVersion = Build.VERSION.SDK_INT;
             if (MyVersion > Build.VERSION_CODES.LOLLIPOP) {
                 if (!checkIfAlreadyhavePermission()) {
@@ -1382,8 +1318,6 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 // যদি সেট না থাকে, ডিফল্ট 30 সেকেন্ড (30000ms) ব্যবহার করবে
                 timeInterval = 30000;
-                activityMainBinding.minIntrval1Tv.setText("ইন্টারভাল: ডিফল্ট " + timeInterval / 1000 + " সেকেন্ড");
-                activityMainBinding.minIntrval2Tv.setText("ইন্টারভাল: ডিফল্ট " + timeInterval / 1000 + " সেকেন্ড");
             }
         }catch (Exception e) {
         }
@@ -1407,18 +1341,6 @@ public class MainActivity extends AppCompatActivity {
                     savedSim1Service = session.getData(Session.SIM1_SERVICE).isEmpty() ? 0 : Integer.parseInt(session.getData(Session.SIM1_SERVICE));
                     savedSim1ServiceName = session.getData(Session.SIM1_SERVICE_NAME);
                 }
-                activityMainBinding.pin1Tv.setText(savedSim1Pin);
-
-                String timeIntervalStr = session.getData(Session.TIME_INTERVAL);
-                if (timeIntervalStr == null || timeIntervalStr.trim().isEmpty()) {
-                    activityMainBinding.minIntrval1Tv.setText("ইন্টারভাল: ডিফল্ট 30 সেকেন্ড");
-                } else {
-                    activityMainBinding.minIntrval1Tv.setText("ইন্টারভাল: " + timeIntervalStr + " সেকেন্ড");
-                }
-                activityMainBinding.minBal1Tv.setText("Balance Limit: " + savedSim1Bal);
-                activityMainBinding.Sim1Layout.setVisibility(View.VISIBLE);
-                activityMainBinding.sim1Status.setVisibility(View.GONE);
-                activityMainBinding.sim1Tv.setText(sim1 + "  | " + sim1Num + " | Id: " + sim1Id);
             }
         }catch (Exception e) {
         }
@@ -1438,17 +1360,6 @@ public class MainActivity extends AppCompatActivity {
                     savedSim2Service = session.getData(Session.SIM2_SERVICE).isEmpty() ? 0 : Integer.parseInt(session.getData(Session.SIM2_SERVICE));
                     savedSim2ServiceName = session.getData(Session.SIM2_SERVICE_NAME);
                 }
-                activityMainBinding.pin2Tv.setText(savedSim2Pin);
-                String timeIntervalStr2 = session.getData(Session.TIME_INTERVAL);
-                if (timeIntervalStr2 == null || timeIntervalStr2.trim().isEmpty()) {
-                    activityMainBinding.minIntrval2Tv.setText("ইন্টারভাল: ডিফল্ট 30 সেকেন্ড");
-                } else {
-                    activityMainBinding.minIntrval2Tv.setText("ইন্টারভাল: " + timeIntervalStr2 + " সেকেন্ড");
-                }
-                activityMainBinding.minBal2Tv.setText("Balance Limit: " + savedSim2Bal);
-                activityMainBinding.Sim2Layout.setVisibility(View.VISIBLE);
-                activityMainBinding.sim2Status.setVisibility(View.GONE);
-                activityMainBinding.sim2Tv.setText(sim2 + "  | " + sim2Num + " | Id: " + sim2Id);
             }
         }catch (Exception e) {
         }
@@ -1464,7 +1375,7 @@ public class MainActivity extends AppCompatActivity {
                 handler.post(simOneRunable = new Runnable() {
                     @Override
                     public void run() {
-                        if (!activityMainBinding.status1Sw.isChecked()) {
+                        if (!sim1Enabled) {
                             if (!isAnyServiceEnabled()) {
                                 stopCountdown();
                             }
@@ -1493,7 +1404,7 @@ public class MainActivity extends AppCompatActivity {
                 handler.post(simTwoRunable = new Runnable() {
                     @Override
                     public void run() {
-                        if (!activityMainBinding.status2Sw.isChecked()) {
+                        if (!sim2Enabled) {
                             if (!isAnyServiceEnabled()) {
                                 stopCountdown();
                             }
@@ -1519,16 +1430,15 @@ public class MainActivity extends AppCompatActivity {
         try {
             if (slot == sim1Id) {
                 getSim1Bal = bal;
-                activityMainBinding.getBal1Tv.setText("Balance: " + bal);
 
                 // Balance check সম্পূর্ণ হয়েছে - যদি status button ON থাকে এবং balance check এর অপেক্ষায় থাকে, তাহলে 30 সেকেন্ড পর request fetch শুরু করুন
                 // Balance check complete - if status button is ON and waiting for balance check, start fetching requests after 30 seconds
-                if (isWaitingForBalanceCheckSim1 && activityMainBinding.status1Sw.isChecked()) {
+                if (isWaitingForBalanceCheckSim1 && sim1Enabled) {
                     isWaitingForBalanceCheckSim1 = false;
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
-                            if (activityMainBinding.status1Sw.isChecked() && !isProcessingSim1 && requestQueueSim1.isEmpty()) {
+                            if (sim1Enabled && !isProcessingSim1 && requestQueueSim1.isEmpty()) {
                                 fetchPendingForSim(1);
                             }
                         }
@@ -1537,16 +1447,15 @@ public class MainActivity extends AppCompatActivity {
             }
             if (slot == sim2Id) {
                 getSim2Bal = bal;
-                activityMainBinding.getBal2Tv.setText("Balance: " + bal);
 
                 // Balance check সম্পূর্ণ হয়েছে - যদি status button ON থাকে এবং balance check এর অপেক্ষায় থাকে, তাহলে 30 সেকেন্ড পর request fetch শুরু করুন
                 // Balance check complete - if status button is ON and waiting for balance check, start fetching requests after 30 seconds
-                if (isWaitingForBalanceCheckSim2 && activityMainBinding.status2Sw.isChecked()) {
+                if (isWaitingForBalanceCheckSim2 && sim2Enabled) {
                     isWaitingForBalanceCheckSim2 = false;
                     handler.postDelayed(new Runnable() {
                         @Override
                         public void run() {
-                            if (activityMainBinding.status2Sw.isChecked() && !isProcessingSim2 && requestQueueSim2.isEmpty()) {
+                            if (sim2Enabled && !isProcessingSim2 && requestQueueSim2.isEmpty()) {
                                 fetchPendingForSim(2);
                             }
                         }
@@ -1578,36 +1487,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean checkIfAlreadyhavePermission() {
-        int result = ContextCompat.checkSelfPermission(this, Manifest.permission.GET_ACCOUNTS);
-        boolean notificationsGranted = true;
-
-        // Check POST_NOTIFICATIONS permission for Android 13+ (API 33+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationsGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-        }
-
-        return result == PackageManager.PERMISSION_GRANTED && notificationsGranted;
+        return AppPermissionSupport.hasAllRuntimePermissions(this);
     }
 
     private void requestForSpecificPermission() {
-        List<String> permissions = new ArrayList<>();
-        permissions.add(Manifest.permission.READ_CONTACTS);
-        permissions.add(Manifest.permission.CALL_PHONE);
-        permissions.add(Manifest.permission.SYSTEM_ALERT_WINDOW);
-        permissions.add(Manifest.permission.READ_PHONE_STATE);
-        permissions.add(Manifest.permission.GET_ACCOUNTS);
-        permissions.add(Manifest.permission.RECEIVE_SMS);
-        permissions.add(Manifest.permission.READ_SMS);
-        permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-        permissions.add(Manifest.permission.WRITE_SETTINGS);
-        permissions.add(Manifest.permission.WRITE_SECURE_SETTINGS);
-        permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-
-        // Add POST_NOTIFICATIONS permission for Android 13+ (API 33+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS);
+        List<String> permissions = AppPermissionSupport.getMissingRuntimePermissions(this);
+        if (permissions.isEmpty()) {
+            return;
         }
-
         ActivityCompat.requestPermissions(MainActivity.this, permissions.toArray(new String[0]), 101);
     }
 
@@ -1629,11 +1516,8 @@ public class MainActivity extends AppCompatActivity {
                 if (info0.getNumber() != null) {
                     sim1Num = info0.getNumber();
                     sim1Num = sim1Num.replace("+88", "").isEmpty() ? session.getData(Session.SIM1_NUMBER) : sim1Num.replace("+88", "");
-                    activityMainBinding.sim1Tv.setText(sim1 + "  | No:  " + sim1Num + " | Id: " + sim1Id);
                 }
                 session.setData(Session.SIM1_ID, String.valueOf(sim1Id));
-                activityMainBinding.Sim1Layout.setVisibility(View.VISIBLE);
-                activityMainBinding.sim1Status.setVisibility(View.GONE);
             }
 
             if (subscriptionInfoList.size() >= 2) {
@@ -1646,28 +1530,12 @@ public class MainActivity extends AppCompatActivity {
                     if (info1.getNumber() != null) {
                         sim2Num = info1.getNumber();
                         sim2Num = sim2Num.replace("+88", "").isEmpty() ? session.getData(Session.SIM2_NUMBER) : sim2Num.replace("+88", "");
-                        activityMainBinding.sim2Tv.setText(sim2 + "  | " + sim2Num + " | Id: " + sim2Id);
                     }
 
                     session.setData(Session.SIM2_ID, String.valueOf(sim2Id));
-                    activityMainBinding.Sim2Layout.setVisibility(View.VISIBLE);
-                    activityMainBinding.sim2Status.setVisibility(View.GONE);
                 }
             }
         }
-    }
-
-    private void addListenerOnSpinnerItemSelection() {
-        final List<String> serviceList = new ArrayList<>(ServiceCatalog.getServices());
-
-        ArrayAdapter<String> serviceAdapter;
-        serviceAdapter = new ArrayAdapter(MainActivity.this, android.R.layout.simple_spinner_item, serviceList);
-
-        serviceAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-
-        activityMainBinding.service1Sp.setAdapter(serviceAdapter);
-        activityMainBinding.service2Sp.setAdapter(serviceAdapter);
-
     }
 
     private void domainSetting() {
@@ -1719,127 +1587,69 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void sim1Setting() {
-        activityMainBinding.sim1SettingImg.setOnClickListener(view -> openSettingsScreen());
-    }
-
-    private void sim2Setting() {
-        activityMainBinding.sim2SettingImg.setOnClickListener(view -> openSettingsScreen());
-    }
-
-    private void simServiceSelect() {
-        if (savedSim1Service != -1) {
-            activityMainBinding.service1Sp.setSelection(savedSim1Service);
-        }
-        activityMainBinding.service1Sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                String serviceName = String.valueOf(adapterView.getItemAtPosition(i));
-                if (!ServiceCatalog.SELECT_ONE.equals(serviceName)) {
-                    int selectItem = adapterView.getSelectedItemPosition();
-                    session.setData(Session.SIM1_SERVICE, String.valueOf(selectItem));
-                    session.setData(Session.SIM1_SERVICE_NAME, serviceName);
-                    savedSim1Service = selectItem;
-                    savedSim1ServiceName = serviceName;
-                    session.setData(SIM1_SERVICE_CODE, ServiceCatalog.getCodeForService(savedSim1ServiceName));
-                }
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> adapterView) {
-
-            }
-        });
-
-        if (savedSim2Service != -1) {
-            activityMainBinding.service2Sp.setSelection(savedSim2Service);
-        }
-        activityMainBinding.service2Sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-                String serviceName = String.valueOf(adapterView.getItemAtPosition(i));
-                if (!ServiceCatalog.SELECT_ONE.equals(serviceName)) {
-                    int selectItem = adapterView.getSelectedItemPosition();
-                    session.setData(Session.SIM2_SERVICE, String.valueOf(selectItem));
-                    session.setData(Session.SIM2_SERVICE_NAME, serviceName);
-                    savedSim2Service = selectItem;
-                    savedSim2ServiceName = serviceName;
-                    session.setData(SIM2_SERVICE_CODE, ServiceCatalog.getCodeForService(savedSim2ServiceName));
-                }
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> adapterView) {
-
-            }
-        });
-    }
-
-    private void serviceOnOff() {
-        activityMainBinding.status1Sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
-                if (isSyncingSwitch) {
-                    return;
-                }
-                session.setBooleanData(Session.SIM1_ENABLED, isChecked);
-                if (isChecked) {
-                    if (!ensureSubscriptionActive()) {
-                        Toast.makeText(MainActivity.this, getSubscriptionBlockedMessage(), Toast.LENGTH_SHORT).show();
-                        activityMainBinding.status1Sw.setChecked(false);
-                        return;
-                    }
-                    List<ServiceConfig> sim1Cfgs = session.getActiveServicesForSim(1);
-                    boolean hasConfig = !sim1Cfgs.isEmpty() || (savedSim1Pin != null && !savedSim1Pin.isEmpty() && savedSim1Service != 0);
-                    if (hasConfig) {
-                        scheduleCountdown(getTimerTime());
-                        callGetNewPendingAfterBalanceCheck(sim1Id);
-                    } else {
-                        Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
-                        activityMainBinding.status1Sw.setChecked(false);
-                    }
-                } else {
-                    isWaitingForBalanceCheckSim1 = false;
-                }
-                refreshPowerButton();
-            }
-        });
-
-        activityMainBinding.status2Sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
-            @Override
-            public void onCheckedChanged(CompoundButton compoundButton, boolean isChecked) {
-                if (isSyncingSwitch) {
-                    return;
-                }
-                session.setBooleanData(Session.SIM2_ENABLED, isChecked);
-                if (isChecked) {
-                    if (!ensureSubscriptionActive()) {
-                        Toast.makeText(MainActivity.this, getSubscriptionBlockedMessage(), Toast.LENGTH_SHORT).show();
-                        activityMainBinding.status2Sw.setChecked(false);
-                        return;
-                    }
-                    List<ServiceConfig> sim2Cfgs = session.getActiveServicesForSim(2);
-                    boolean hasConfig2 = !sim2Cfgs.isEmpty() || (savedSim2Pin != null && !savedSim2Pin.isEmpty() && savedSim2Service != 0);
-                    if (hasConfig2) {
-                        scheduleCountdown(getTimerTime());
-                        callGetNewPendingAfterBalanceCheck(sim2Id);
-                    } else {
-                        Toast.makeText(MainActivity.this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
-                        activityMainBinding.status2Sw.setChecked(false);
-                    }
-                } else {
-                    isWaitingForBalanceCheckSim2 = false;
-                }
-                refreshPowerButton();
-            }
-        });
-
-    }
 
     private void refreshPowerButton() {
-        boolean anyOn = activityMainBinding.status1Sw.isChecked() || activityMainBinding.status2Sw.isChecked();
+        boolean anyOn = sim1Enabled || sim2Enabled;
         updatePowerButtonState(anyOn);
         refreshCountdownState();
+    }
+
+    private void setSim1Enabled(boolean enabled) {
+        session.setBooleanData(Session.SIM1_ENABLED, enabled);
+        if (enabled) {
+            if (!ensureSubscriptionActive()) {
+                sim1Enabled = false;
+                session.setBooleanData(Session.SIM1_ENABLED, false);
+                Toast.makeText(this, getSubscriptionBlockedMessage(), Toast.LENGTH_SHORT).show();
+                refreshPowerButton();
+                return;
+            }
+            List<ServiceConfig> sim1Cfgs = session.getActiveServicesForSim(1);
+            boolean hasConfig = !sim1Cfgs.isEmpty() || (savedSim1Pin != null && !savedSim1Pin.isEmpty() && savedSim1Service != 0);
+            if (!hasConfig) {
+                sim1Enabled = false;
+                session.setBooleanData(Session.SIM1_ENABLED, false);
+                Toast.makeText(this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
+                refreshPowerButton();
+                return;
+            }
+            sim1Enabled = true;
+            scheduleCountdown(getTimerTime());
+            callGetNewPendingAfterBalanceCheck(sim1Id);
+        } else {
+            sim1Enabled = false;
+            isWaitingForBalanceCheckSim1 = false;
+        }
+        refreshPowerButton();
+    }
+
+    private void setSim2Enabled(boolean enabled) {
+        session.setBooleanData(Session.SIM2_ENABLED, enabled);
+        if (enabled) {
+            if (!ensureSubscriptionActive()) {
+                sim2Enabled = false;
+                session.setBooleanData(Session.SIM2_ENABLED, false);
+                Toast.makeText(this, getSubscriptionBlockedMessage(), Toast.LENGTH_SHORT).show();
+                refreshPowerButton();
+                return;
+            }
+            List<ServiceConfig> sim2Cfgs = session.getActiveServicesForSim(2);
+            boolean hasConfig = !sim2Cfgs.isEmpty() || (savedSim2Pin != null && !savedSim2Pin.isEmpty() && savedSim2Service != 0);
+            if (!hasConfig) {
+                sim2Enabled = false;
+                session.setBooleanData(Session.SIM2_ENABLED, false);
+                Toast.makeText(this, "Please Check the system settings", Toast.LENGTH_SHORT).show();
+                refreshPowerButton();
+                return;
+            }
+            sim2Enabled = true;
+            scheduleCountdown(getTimerTime());
+            callGetNewPendingAfterBalanceCheck(sim2Id);
+        } else {
+            sim2Enabled = false;
+            isWaitingForBalanceCheckSim2 = false;
+        }
+        refreshPowerButton();
     }
     //endregion Settings And Service
 
@@ -1847,7 +1657,15 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == 101) {
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            boolean granted = grantResults.length > 0;
+            for (int result : grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    granted = false;
+                    break;
+                }
+            }
+
+            if (granted) {
                 getsSimServiceInfo();
                 Toast.makeText(MainActivity.this, "Thanks for give permission", Toast.LENGTH_SHORT).show();
             } else {
@@ -1876,12 +1694,6 @@ public class MainActivity extends AppCompatActivity {
         if (!isNetworkAvailable()) {
             return;
         }
-        if (!(activityMainBinding.status1Sw.isChecked()) && Objects.equals(simSlotId, String.valueOf(sim1Id))) {
-            return;
-        }
-        if (!(activityMainBinding.status2Sw.isChecked()) && Objects.equals(simSlotId, String.valueOf(sim2Id))) {
-            return;
-        }
         if (serverRepository == null) {
             return;
         }
@@ -1890,6 +1702,10 @@ public class MainActivity extends AppCompatActivity {
         try {
             slotId = Integer.parseInt(simSlotId);
         } catch (NumberFormatException e) {
+            return;
+        }
+
+        if (!isSimEnabled(slotId)) {
             return;
         }
 
@@ -2082,11 +1898,11 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        String customDialCode = buildCustomDialCode(svcCfg, type, phone, amount, simPin);
+        List<String> customSteps = UssdDialTemplateResolver.resolveSteps(svcCfg, type, phone, amount, simPin);
         // A user-enabled custom USSD template should fully replace the built-in
         // hardcoded dial path for every service type, including mobile banking.
-        if (!customDialCode.isEmpty()) {
-            singleStepUssd(customDialCode, sid, simSlotId);
+        if (!customSteps.isEmpty()) {
+            executeCustomUssd(customSteps, sid, simSlotId);
             return;
         }
 
@@ -2216,29 +2032,6 @@ public class MainActivity extends AppCompatActivity {
         // No balance check or server fetch here — the periodic timer handles all polling
     }
 
-    /** Replaces {PHONE}, {AMOUNT}, {PIN} placeholders in a USSD dial template. */
-    private String applyDialTemplate(String template, String phone, String amount, String pin) {
-        return template
-                .replace("{PHONE}", phone)
-                .replace("{AMOUNT}", amount)
-                .replace("{PIN}", pin);
-    }
-
-    private String buildCustomDialCode(ServiceConfig config, String type, String phone, String amount, String pin) {
-        if (config == null || !config.customUssdEnabled) {
-            return "";
-        }
-
-        String template = "0".equals(type) && config.dialCode0 != null && !config.dialCode0.isEmpty()
-                ? config.dialCode0
-                : config.dialCode1;
-        if (template == null || template.trim().isEmpty()) {
-            return "";
-        }
-
-        return applyDialTemplate(template.trim(), phone, amount, pin);
-    }
-
     /** Dials a single-step USSD code, posts the response, and completes the request. */
     private void singleStepUssd(String dialCode, String sid, int simSlotId) {
         if (simSlotId == sim1Id) sim_number = session.getData(Session.SIM1_NUMBER);
@@ -2255,6 +2048,70 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void over(String message) {
                 onRequestCompleted(simSlotId);
+            }
+        });
+    }
+
+    /**
+     * Routes a resolved custom USSD step list to the correct executor.
+     * A single entry is dialed directly; two or more entries use the multi-step flow
+     * (dial steps[0], then send steps[1..n] sequentially into the USSD dialog).
+     */
+    private void executeCustomUssd(List<String> steps, String sid, int simSlotId) {
+        if (steps.size() == 1) {
+            singleStepUssd(steps.get(0), sid, simSlotId);
+        } else {
+            multiStepUssd(steps, sid, simSlotId);
+        }
+    }
+
+    /**
+     * Dials steps.get(0) as the initial USSD code, then sends each remaining step
+     * (steps[1..n]) as sequential inputs into the USSD dialog.
+     * The final step's response is posted as the transaction result.
+     *
+     * Template example: {@code *247#-1-{PHONE}-{AMOUNT}-{PIN}}
+     */
+    private void multiStepUssd(List<String> steps, String sid, int simSlotId) {
+        if (simSlotId == sim1Id) sim_number = session.getData(Session.SIM1_NUMBER);
+        else sim_number = session.getData(Session.SIM2_NUMBER);
+        final String finalSimNum = sim_number;
+        final List<String> inputSteps = steps.subList(1, steps.size());
+        ussdApi.callUSSDInvoke(steps.get(0), simSlotId, map, new USSDController.CallbackInvoke() {
+            @Override
+            public void responseInvoke(String message) {
+                // First USSD menu received — start sending subsequent steps
+                sendCustomStep(inputSteps, 0, sid, simSlotId, finalSimNum);
+            }
+            @Override
+            public void over(String message) {
+                onRequestCompleted(simSlotId);
+            }
+        });
+    }
+
+    /**
+     * Sends steps.get(index) into the active USSD dialog, then recurses for the next step.
+     * On the last step the final USSD response is captured and posted as the result.
+     */
+    private void sendCustomStep(List<String> steps, int index, String sid, int simSlotId, String simNum) {
+        if (index >= steps.size()) {
+            ussdApi.cancel();
+            onRequestCompleted(simSlotId);
+            return;
+        }
+        boolean isLast = (index == steps.size() - 1);
+        ussdApi.send(steps.get(index), new USSDController.CallbackMessage() {
+            @Override
+            public void responseMessage(String message) {
+                if (isLast) {
+                    ussdApi.cancel();
+                    InsertNewPopUpMessage(
+                            message.replaceAll(System.lineSeparator(), " "), sid, "FlashMessage", simNum, simSlotId);
+                    onRequestCompleted(simSlotId);
+                } else {
+                    sendCustomStep(steps, index + 1, sid, simSlotId, simNum);
+                }
             }
         });
     }
@@ -2372,22 +2229,22 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         if (simId == sim1Id) {
-            if (activityMainBinding.status1Sw.isChecked()) {
+            if (sim1Enabled) {
                 handler.postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        if (activityMainBinding.status1Sw.isChecked() && !isProcessingSim1 && requestQueueSim1.isEmpty()) {
+                        if (sim1Enabled && !isProcessingSim1 && requestQueueSim1.isEmpty()) {
                             fetchPendingForSim(1);
                         }
                     }
                 }, getTimerTime());
             }
         } else if (simId == sim2Id) {
-            if (activityMainBinding.status2Sw.isChecked()) {
+            if (sim2Enabled) {
                 handler.postDelayed(new Runnable() {
                     @Override
                     public void run() {
-                        if (activityMainBinding.status2Sw.isChecked() && !isProcessingSim2 && requestQueueSim2.isEmpty()) {
+                        if (sim2Enabled && !isProcessingSim2 && requestQueueSim2.isEmpty()) {
                             fetchPendingForSim(2);
                         }
                     }

@@ -2,11 +2,8 @@ package com.dRecharge.modem;
 
 import android.app.AlertDialog;
 import android.app.TimePickerDialog;
-import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -15,14 +12,11 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
-import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
-
 import com.dRecharge.modem.helper.ServiceConfig;
 import com.dRecharge.modem.helper.Session;
 import com.dRecharge.modem.helper.ThemeManager;
@@ -127,7 +121,9 @@ public class SettingsActivity extends AppCompatActivity {
             session.setBooleanData(Session.IS_DOMAIN_VALIED, true);
             session.clearSubscriptionState();
             dialog.dismiss();
-            restartApp("Domain saved");
+            refreshDomainDisplay(domainValueTv);
+            setResult(RESULT_OK);
+            Toast.makeText(this, "Domain saved", Toast.LENGTH_SHORT).show();
         });
 
         dialog.show();
@@ -250,10 +246,14 @@ public class SettingsActivity extends AppCompatActivity {
             ThemeManager.setSelectedTheme(this, selectedTheme);
 
             dialog.dismiss();
+            setResult(RESULT_OK);
             String msg = themeChanged
                     ? "Theme: " + ThemeManager.THEME_NAMES[selectedTheme] + " · Interval: " + seconds + "s"
                     : "Interval set to " + seconds + "s";
-            restartApp(msg);
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+            if (themeChanged) {
+                recreate();
+            }
         });
 
         dialog.show();
@@ -397,30 +397,64 @@ public class SettingsActivity extends AppCompatActivity {
             }
             session.saveServiceConfig(updated);
             dialog.dismiss();
-            restartApp("Settings saved");
+            buildServiceList();
+            setResult(RESULT_OK);
+            Toast.makeText(this, "Settings saved", Toast.LENGTH_SHORT).show();
         });
 
         dialog.show();
     }
 
-    /** Returns the default USSD template hint for type-1 (commission/default) dial. */
+    /**
+     * Returns the default USSD template pre-loaded into the edit field when custom USSD
+     * is first enabled.  Two formats are used:
+     *
+     * <p><b>Full template</b> (services with a predictable single or multi-step flow):
+     * The whole sequence is described using {@code {PHONE}}, {@code {AMOUNT}}, {@code {PIN}}
+     * placeholders and {@code -} as the step separator.  Example:
+     * {@code *444*{PHONE}*{AMOUNT}*0*{PIN}#}  (single-step Grameen)
+     * {@code *555*{PHONE}*{AMOUNT}*0*{PIN}#-0} (Banglalink: dial then send "0")
+     * {@code *247#-1-{PHONE}-{AMOUNT}-{PIN}}   (bKash Cash-In: dial *247#, menu 1, phone, amount, PIN)
+     *
+     * <p><b>Initial code only</b> (services with complex/conditional flows or that need a
+     * server-provided reference ID): Only the initial dial code is stored.  The built-in
+     * step logic is preserved and the user just overrides the opening code.  Examples:
+     * {@code *247#} for bKash-Personal-SIM (handles both Send Money and Cash-Out,
+     * both of which include a server-generated reference ID that cannot be templated).
+     */
     private String getDefaultDialCode1(String service) {
         switch (service) {
-            case "Grameen":           return "*444*{PHONE}*{AMOUNT}*0*{PIN}#";
-            case "Skitto":            return "*666*{PHONE}*{AMOUNT}*{PIN}#";
-            case "Robi":              return "*8383*2*{PHONE}*{AMOUNT}*{PIN}#";
-            case "Airtel":            return "*444*1*{PHONE}*{AMOUNT}*{PIN}#";
-            case "Banglalink":        return "*555*{PHONE}*{AMOUNT}*0*{PIN}#";
-            case "Taletalk":          return "*250*{PHONE}*{AMOUNT}*{PIN}#";
-            case "bKash-Load":        return "*247*1*{PHONE}*{AMOUNT}*{PIN}#";
-            case "bKash-Agent-SIM":   return "*247*2*{PHONE}*{AMOUNT}*{PIN}#";
-            case "bKash-Personal-SIM": return "*247*1*{PHONE}*{AMOUNT}*{PIN}#";
-            case "Roket-Agent-SIM":   return "*322*2*{PHONE}*{AMOUNT}*{PIN}#";
-            case "Roket-Personal-SIM": return "*322*1*{PHONE}*{AMOUNT}*{PIN}#";
-            case "Nagad-Load":        return "*167*1*{PHONE}*{AMOUNT}*{PIN}#";
-            case "Nagad-Agent-SIM":   return "*167*2*{PHONE}*{AMOUNT}*{PIN}#";
-            case "Nagad-Personal-SIM": return "*167*1*{PHONE}*{AMOUNT}*{PIN}#";
-            default:                  return "{PHONE}*{AMOUNT}*{PIN}#";
+            // ── Single-step services ───────────────────────────────────────────────────
+            // The entire USSD code is dialed at once; the result comes back immediately.
+            case "Grameen":            return "*444*{PHONE}*{AMOUNT}*0*{PIN}#";
+            case "Skitto":             return "*666*{PHONE}*{AMOUNT}*{PIN}#";
+            case "Robi":               return "*8383*2*{PHONE}*{AMOUNT}*{PIN}#";
+            case "Airtel":             return "*444*1*{PHONE}*{AMOUNT}*{PIN}#";
+            case "Taletalk":           return "*250*{PHONE}*{AMOUNT}*{PIN}#";
+
+            // ── Two-step service ───────────────────────────────────────────────────────
+            // Dial the full code, then send "0" to confirm when the dialog appears.
+            case "Banglalink":         return "*555*{PHONE}*{AMOUNT}*0*{PIN}#-0";
+
+            // ── Multi-step (agent Cash-In) ─────────────────────────────────────────────
+            // Flow: dial initial code → select menu option → phone → amount → PIN.
+            // The "-" separator marks each subsequent USSD dialog input.
+            case "bKash-Agent-SIM":    return "*247#-1-{PHONE}-{AMOUNT}-{PIN}";
+            case "Nagad-Agent-SIM":    return "*167#-1-{PHONE}-{AMOUNT}-{PIN}";
+            case "Roket-Agent-SIM":    return "*322#-1-{PHONE}-{AMOUNT}-{PIN}";
+
+            // ── Initial code only (complex flows) ─────────────────────────────────────
+            // These services include conditional branches or a server-generated reference
+            // ID that cannot be expressed in a static template.  Setting only the initial
+            // code lets the built-in step logic run unchanged while still allowing the
+            // operator to swap the opening dial code if the carrier changes it.
+            case "bKash-Personal-SIM": return "*247#";   // Send Money / Cash-Out (needs server ref)
+            case "bKash-Load":         return "*247#";
+            case "Roket-Personal-SIM": return "*322#";   // Send Money / Cash-Out (needs server ref)
+            case "Nagad-Personal-SIM": return "*167#";   // Send Money / Cash-Out (conditional flow)
+            case "Nagad-Load":         return "*167#";
+
+            default:                   return "*{PHONE}*{AMOUNT}*{PIN}#";
         }
     }
 
@@ -455,16 +489,6 @@ public class SettingsActivity extends AppCompatActivity {
             String time = String.format(java.util.Locale.US, "%02d:%02d %s", h12, minute, amPm);
             targetTv.setText(time);
         }, initHour, initMin, false).show();
-    }
-
-    private void restartApp(String toastMessage) {
-        Toast.makeText(this, toastMessage + " — restarting…", Toast.LENGTH_SHORT).show();
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            Intent intent = new Intent(getApplicationContext(), MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            startActivity(intent);
-            finishAffinity();
-        }, 700);
     }
 
 }

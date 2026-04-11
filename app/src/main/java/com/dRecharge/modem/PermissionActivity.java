@@ -1,9 +1,7 @@
 package com.dRecharge.modem;
 
 import android.Manifest;
-import android.app.AppOpsManager;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -17,19 +15,14 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
+import com.dRecharge.modem.helper.AppPermissionSupport;
 import com.dRecharge.modem.helper.ThemeManager;
 import com.dRecharge.modem.ussd.USSDService;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class PermissionActivity extends AppCompatActivity {
 
     private static final int RC_PERMISSIONS = 201;
-    private static final String PREFS_NAME = "dRechargePrefs";
-    private static final String KEY_RESTRICTED_SETTINGS_GRANTED = "restricted_settings_granted";
 
     private ImageView step1Icon, stepRestrictedIcon, step2Icon, step3Icon, step4Icon;
     private Button step1Btn, stepRestrictedBtn, step2Btn, step3Btn, step4Btn, continueBtn;
@@ -117,11 +110,11 @@ public class PermissionActivity extends AppCompatActivity {
         if (continueBtn != null) {
             if (restrictedUnlockPending) {
                 restrictedUnlockPending = false;
-                // Persist the restricted settings granted state
-                getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                    .edit()
-                    .putBoolean(KEY_RESTRICTED_SETTINGS_GRANTED, true)
-                    .apply();
+                if (!isRestrictedSettingsUnlocked()) {
+                    Toast.makeText(this,
+                            "Restricted settings is still locked. Please finish that step to continue.",
+                            Toast.LENGTH_LONG).show();
+                }
             }
             updateUI();
             // Auto-proceed if all required steps are now complete — the user shouldn't
@@ -168,26 +161,7 @@ public class PermissionActivity extends AppCompatActivity {
     }
 
     private void requestRuntimePermissions() {
-        List<String> needed = new ArrayList<>();
-        String[] required = {
-            Manifest.permission.CALL_PHONE,
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.RECEIVE_SMS,
-            Manifest.permission.READ_SMS,
-            Manifest.permission.READ_CONTACTS,
-            Manifest.permission.GET_ACCOUNTS,
-        };
-        for (String p : required) {
-            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
-                needed.add(p);
-            }
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                needed.add(Manifest.permission.POST_NOTIFICATIONS);
-            }
-        }
+        java.util.List<String> needed = AppPermissionSupport.getMissingRuntimePermissions(this);
         if (needed.isEmpty()) {
             Toast.makeText(this, "All app permissions already granted", Toast.LENGTH_SHORT).show();
         } else {
@@ -206,24 +180,7 @@ public class PermissionActivity extends AppCompatActivity {
     // ── Permission checks ──
 
     private boolean hasRuntimePermissions() {
-        String[] required = {
-            Manifest.permission.CALL_PHONE,
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.RECEIVE_SMS,
-            Manifest.permission.READ_SMS,
-            Manifest.permission.READ_CONTACTS,
-            Manifest.permission.GET_ACCOUNTS,
-        };
-        for (String p : required) {
-            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
-                return false;
-            }
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    == PackageManager.PERMISSION_GRANTED;
-        }
-        return true;
+        return AppPermissionSupport.hasAllRuntimePermissions(this);
     }
 
     private boolean isAccessibilityEnabled() {
@@ -246,27 +203,13 @@ public class PermissionActivity extends AppCompatActivity {
     }
 
     private boolean isRestrictedSettingsUnlocked() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Try the AppOps check first (works on stock Android)
-            try {
-                AppOpsManager appOps = (AppOpsManager) getSystemService(APP_OPS_SERVICE);
-                int mode = appOps.checkOpNoThrow(
-                        "android:access_restricted_settings",
-                        android.os.Process.myUid(), getPackageName());
-                if (mode == AppOpsManager.MODE_ALLOWED) {
-                    // Persist the state for reliability
-                    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                        .edit()
-                        .putBoolean(KEY_RESTRICTED_SETTINGS_GRANTED, true)
-                        .apply();
-                    return true;
-                }
-            } catch (Exception ignored) {}
-            // Fallback: check persisted state (user clicked the button and returned from Settings)
-            return getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-                .getBoolean(KEY_RESTRICTED_SETTINGS_GRANTED, false);
-        }
-        return true; // Not applicable below Android 13
+        // Primary check via AppOps — works on stock Android 13+.
+        if (AppPermissionSupport.isRestrictedSettingsUnlocked(this)) return true;
+        // Fallback: Android 13+ will not allow an accessibility service to stay enabled
+        // on a restricted app. So if accessibility is already running, the grant must
+        // have been accepted at some point — even on ROMs where the AppOps query is
+        // unreliable (MIUI, ColorOS, etc.).
+        return isAccessibilityEnabled();
     }
 
     private boolean criticalPermissionsGranted() {
