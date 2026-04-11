@@ -286,13 +286,53 @@ if(!empty($msg)){
 
 		// Nagad Start Here Final
 		if ($pcode=="NG") {
-			$reqnumber=getStringBetween($msg, 'Customer:','TxnID:');
-			$reqamount=getStringBetween($msg, 'Amount: Tk','Customer:');
-			$qtrxid=getStringBetween($msg, 'TxnID:','Comm:');
-			if (empty($qtrxid)) {
-				$qtrxid=getStringBetween($msg, 'TrxID',' ');
+			// reqnumber: only call getStringBetween when the FROM delimiter actually exists
+			$reqnumber = null;
+			if (strpos($msg, 'Customer:') !== false) {
+				$reqnumber = getStringBetween($msg, 'Customer:', ' TxnID');
 			}
-			$simam=getStringBetween($msg, 'Balance: Tk','.'); 
+			if (empty(trim($reqnumber)) && strpos($msg, 'Mobile:') !== false) {
+				$reqnumber = getStringBetween($msg, 'Mobile:', ' TxnID');
+			}
+			if (empty(trim($reqnumber))) {
+				// e.g. "Cash-In Tk 50.00 to 01811628121 is successful."
+				if (preg_match('/\bto\s+(01[0-9]{9})\b/', $msg, $m)) {
+					$reqnumber = $m[1];
+				}
+			}
+
+			// reqamount: guard each delimiter check
+			$reqamount = null;
+			if (strpos($msg, 'Amount: Tk') !== false) {
+				if (strpos($msg, 'Customer:') !== false) {
+					$reqamount = getStringBetween($msg, 'Amount: Tk', 'Customer:');
+				}
+				if (empty(trim($reqamount)) && strpos($msg, 'Mobile:') !== false) {
+					$reqamount = getStringBetween($msg, 'Amount: Tk', 'Mobile:');
+				}
+			}
+			if (empty(trim($reqamount))) {
+				// e.g. "Cash-In Tk 50.00 to ..." — amount right after Tk
+				if (preg_match('/\bTk\s+([0-9]+(?:\.[0-9]+)?)\b/', $msg, $m)) {
+					$reqamount = $m[1];
+				}
+			}
+
+			// qtrxid: always use regex — avoids getStringBetween false-start bug
+			// Handles both TxnID: and TrxID: used in different Nagad message formats
+			$qtrxid = null;
+			if (preg_match('/\b(?:TxnID|TrxID)\s*:?\s*([A-Za-z0-9_\-\.]+)/i', $msg, $m)) {
+				$qtrxid = trim($m[1]);
+			}
+
+			// simam: guard delimiter check
+			$simam = null;
+			if (strpos($msg, 'Balance: Tk') !== false) {
+				$simam = getStringBetween($msg, 'Balance: Tk', '.');
+			}
+			if (empty(trim($simam)) && strpos($msg, 'Bal: Tk') !== false) {
+				$simam = getStringBetween($msg, 'Bal: Tk', '.');
+			}
 		}
 
 
@@ -460,7 +500,8 @@ if(!empty($msg)){
 
 			$requestHandledBySid = true;
 			$isRequestFailure = isAndroidRequestFailure($msg, $sendcode);
-			$requestTrxidResolved = !empty($qtrxid) ? $qtrxid : '';
+			$requestTrxidResolved = resolveAndroidTransactionId($msg, $qtrxid);
+			$simam = resolveAndroidBalance($msg, $simam);
 			$requestSenderResolved = trim((string)$sendcode);
 			$requestTopupNumberResolved = !empty($requestSenderResolved) ? $requestSenderResolved : $simno;
 
@@ -472,6 +513,10 @@ if(!empty($msg)){
 				}
 				$requestShouldRefund = count($parents_commission) > 0;
 				$requestUpdateSql = "UPDATE reload_sent_number SET status = 'Failed', remark='Failed from android', trxid='" . $conn->real_escape_string($requestTrxidResolved) . "', topup_number='" . $conn->real_escape_string($requestTopupNumberResolved) . "', sim_balance='" . $conn->real_escape_string($simam) . "' WHERE id = '$reload_id'";
+			} elseif (isAndroidRequestSuccess($msg, $sendcode, $pcode)) {
+				$requestStatusResolved = 'Success';
+				$requestShouldCreditCommission = count($parents_commission) > 0;
+				$requestUpdateSql = "UPDATE reload_sent_number SET status = 'Success', topup_number='" . $conn->real_escape_string($requestTopupNumberResolved) . "', sim_balance='" . $conn->real_escape_string($simam) . "', trxid='" . $conn->real_escape_string($requestTrxidResolved) . "', statusCom = '2', remark='Automatic sent" . $conn->real_escape_string($result['parents_commission']) . "' WHERE id = '$reload_id'";
 			}
 
 			if (!empty($requestSenderResolved) && reloadSentNumberHasColumn($conn, 'sender')) {
@@ -621,6 +666,44 @@ function gp_new_message_method($message, $amount_start_char, $amount_end_char, $
     return $result;
 }
 
+function resolveAndroidTransactionId($message, $fallback = '') {
+	$patterns = array(
+		'/\bTxnID\s*:?\s*([A-Za-z0-9_\-\.]+)/i',
+		'/\bTrxID\s*:?\s*([A-Za-z0-9_\-\.]+)/i',
+		'/\bTransaction\s+ID\s*:?\s*([A-Za-z0-9_\-\.]+)/i',
+		'/\bTxnId\s*:?\s*([A-Za-z0-9_\-\.]+)/i',
+		'/\bTxID\s*:?\s*([A-Za-z0-9_\-\.]+)/i'
+	);
+
+	foreach ($patterns as $pattern) {
+		if (preg_match($pattern, $message, $matches)) {
+			$val = trim($matches[1], " \t\n\r\0\x0B.,");
+			if (!empty($val)) {
+				return $val;
+			}
+		}
+	}
+
+	$fallback = trim((string)$fallback);
+	return $fallback;
+}
+
+function resolveAndroidBalance($message, $fallback = '') {
+	$patterns = array(
+		'/\bBalance\s*:?\s*Tk\.?\s*([0-9]+(?:[.,][0-9]+)*)/i',
+		'/\bBal(?:ance)?\s*:?\s*Tk\.?\s*([0-9]+(?:[.,][0-9]+)*)/i',
+		'/\bBalance\s+Tk\.?\s*([0-9]+(?:[.,][0-9]+)*)/i'
+	);
+
+	foreach ($patterns as $pattern) {
+		if (preg_match($pattern, $message, $matches)) {
+			return trim($matches[1]);
+		}
+	}
+
+	return trim((string)$fallback);
+}
+
 function isAndroidRequestFailure($message, $sendcode = '') {
 	if ($sendcode === 'ValidationError') {
 		return true;
@@ -679,6 +762,7 @@ function isAndroidRequestSuccess($message, $sendcode = '', $pcode = '') {
 		'successfully',
 		'successful.',
 		'is successful',
+		'mobile recharge request received.',
 		'received mobile recharge request of tk',
 		'received recharge request of tk',
 		'accepted'
@@ -688,6 +772,11 @@ function isAndroidRequestSuccess($message, $sendcode = '', $pcode = '') {
 		if (strpos($normalized, $successText) !== false) {
 			return true;
 		}
+	}
+
+	if ((strpos($normalized, 'txnid:') !== false || strpos($normalized, 'trxid') !== false)
+		&& (strpos($normalized, 'balance:') !== false || strpos($normalized, 'bal:') !== false || strpos($normalized, 'balance tk') !== false)) {
+		return true;
 	}
 
 	return false;
