@@ -15,6 +15,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.splashscreen.SplashScreen;
 
 import com.airbnb.lottie.LottieAnimationView;
+import com.dRecharge.modem.helper.AppPermissionSupport;
 
 /**
  * Premium Splash Screen for dRecharge Modem Application
@@ -152,14 +153,17 @@ public class SplashActivity extends AppCompatActivity {
         fadeOut.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                // Navigate to PermissionActivity (current launcher)
-                Intent intent = new Intent(SplashActivity.this, PermissionActivity.class);
+                // If the user already completed setup and runtime permissions are still
+                // granted, go directly to MainActivity — no need to visit PermissionActivity.
+                Intent intent;
+                if (AppPermissionSupport.wasSetupCompletedBefore(SplashActivity.this)
+                        && AppPermissionSupport.hasAllRuntimePermissions(SplashActivity.this)) {
+                    intent = new Intent(SplashActivity.this, MainActivity.class);
+                } else {
+                    intent = new Intent(SplashActivity.this, PermissionActivity.class);
+                }
                 startActivity(intent);
-                
-                // Override transition for smooth effect
                 overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-                
-                // Finish splash activity
                 finish();
             }
         });

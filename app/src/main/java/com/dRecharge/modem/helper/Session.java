@@ -80,8 +80,34 @@ public class Session {
                     EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                     EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM);
         } catch (Exception e) {
-            // Fallback: plain prefs if encryption unavailable (should not happen on production devices)
-            prefs = context.getSharedPreferences(PREFER_NAME, Context.MODE_PRIVATE);
+            // EncryptedSharedPreferences can fail when the Android keystore invalidates
+            // the MasterKey (e.g. after a PIN/fingerprint change, or after a device wipe
+            // where the keystore was cleared but data files remain).  In that case the
+            // encrypted prefs file on disk is unreadable.
+            //
+            // Strategy: delete the corrupted file and retry once. If that also fails,
+            // fall back to plain SharedPreferences (no sensitive data will be lost because
+            // the encrypted file was already unreadable).
+            try {
+                java.io.File corruptedFile = new java.io.File(
+                        context.getApplicationContext().getFilesDir().getParent()
+                                + "/shared_prefs/" + PREFER_NAME + ".xml");
+                if (corruptedFile.exists()) {
+                    corruptedFile.delete();
+                }
+                MasterKey masterKey = new MasterKey.Builder(context.getApplicationContext())
+                        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                        .build();
+                prefs = EncryptedSharedPreferences.create(
+                        context.getApplicationContext(),
+                        PREFER_NAME,
+                        masterKey,
+                        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM);
+            } catch (Exception retryException) {
+                // Final fallback: plain prefs if encryption is completely unavailable
+                prefs = context.getSharedPreferences(PREFER_NAME, Context.MODE_PRIVATE);
+            }
         }
         pref = prefs;
         editor = pref.edit();

@@ -110,16 +110,20 @@ public class USSDService extends AccessibilityService {
      */
     public static void send(String text) {
         if (serviceInstance == null) return;
-        AccessibilityNodeInfo root = serviceInstance.getRootInActiveWindow();
-        if (root == null) return;
-        boolean set = setTextIntoNode(root, text);
-        if (!set) return;
-        boolean clicked = clickOnButtonByText(root, "Send")
-                || clickOnButtonByText(root, "SEND")
-                || clickOnButtonByText(root, "Next")
-                || clickOnButtonByText(root, "NEXT");
-        if (!clicked) {
-            clickOnButton(root, 1);
+        try {
+            AccessibilityNodeInfo root = serviceInstance.getRootInActiveWindow();
+            if (root == null) return;
+            boolean set = setTextIntoNode(root, text);
+            if (!set) return;
+            boolean clicked = clickOnButtonByText(root, "Send")
+                    || clickOnButtonByText(root, "SEND")
+                    || clickOnButtonByText(root, "Next")
+                    || clickOnButtonByText(root, "NEXT");
+            if (!clicked) {
+                clickOnButton(root, 1);
+            }
+        } catch (Exception ignored) {
+            // Node may have been recycled by the system between calls.
         }
     }
 
@@ -129,13 +133,17 @@ public class USSDService extends AccessibilityService {
      */
     public static void cancel() {
         if (serviceInstance == null) return;
-        AccessibilityNodeInfo root = serviceInstance.getRootInActiveWindow();
-        if (root == null) return;
-        if (!clickOnButtonByText(root, "Cancel")
-                && !clickOnButtonByText(root, "CANCEL")
-                && !clickOnButtonByText(root, "OK")
-                && !clickOnButtonByText(root, "Ok")) {
-            clickOnButton(root, 0);
+        try {
+            AccessibilityNodeInfo root = serviceInstance.getRootInActiveWindow();
+            if (root == null) return;
+            if (!clickOnButtonByText(root, "Cancel")
+                    && !clickOnButtonByText(root, "CANCEL")
+                    && !clickOnButtonByText(root, "OK")
+                    && !clickOnButtonByText(root, "Ok")) {
+                clickOnButton(root, 0);
+            }
+        } catch (Exception ignored) {
+            // Node may have been recycled by the system between calls.
         }
     }
 
@@ -143,19 +151,31 @@ public class USSDService extends AccessibilityService {
 
     private static String getEventText(AccessibilityEvent event) {
         if (event == null) return "";
-        List<CharSequence> texts = event.getText();
-        if (texts != null && !texts.isEmpty()) {
-            StringBuilder sb = new StringBuilder();
-            for (CharSequence text : texts) {
-                if (text != null && text.length() > 0) {
-                    if (sb.length() > 0) sb.append("\n");
-                    sb.append(text);
+        try {
+            List<CharSequence> texts = event.getText();
+            if (texts != null && !texts.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (CharSequence text : texts) {
+                    if (text != null && text.length() > 0) {
+                        if (sb.length() > 0) sb.append("\n");
+                        sb.append(text);
+                    }
                 }
+                if (sb.length() > 0) return sb.toString();
             }
-            if (sb.length() > 0) return sb.toString();
+            AccessibilityNodeInfo source = event.getSource();
+            if (source == null) return "";
+            // Wrap in try-catch: the source node can be recycled by the system
+            // between getSource() and the recursive text collection below.
+            try {
+                return collectNodeText(source, 0).trim();
+            } catch (IllegalStateException ignored) {
+                // Node was recycled before we could read it.
+                return "";
+            }
+        } catch (Exception ignored) {
+            return "";
         }
-        AccessibilityNodeInfo source = event.getSource();
-        return source == null ? "" : collectNodeText(source, 0).trim();
     }
 
     private boolean hasEventText(AccessibilityEvent event) {
@@ -420,11 +440,15 @@ public class USSDService extends AccessibilityService {
 
     private static AccessibilityNodeInfo findClickable(AccessibilityNodeInfo node) {
         if (node == null) return null;
-        if (node.isClickable()) return node;
-        AccessibilityNodeInfo parent = node.getParent();
-        while (parent != null) {
-            if (parent.isClickable()) return parent;
-            parent = parent.getParent();
+        try {
+            if (node.isClickable()) return node;
+            AccessibilityNodeInfo parent = node.getParent();
+            while (parent != null) {
+                if (parent.isClickable()) return parent;
+                parent = parent.getParent();
+            }
+        } catch (IllegalStateException ignored) {
+            // Node (or one of its ancestors) was recycled by the system mid-traversal.
         }
         return null;
     }

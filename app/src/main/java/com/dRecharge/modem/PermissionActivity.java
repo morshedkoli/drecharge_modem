@@ -205,10 +205,14 @@ public class PermissionActivity extends AppCompatActivity {
     private boolean isRestrictedSettingsUnlocked() {
         // Primary check via AppOps — works on stock Android 13+.
         if (AppPermissionSupport.isRestrictedSettingsUnlocked(this)) return true;
-        // Fallback: Android 13+ will not allow an accessibility service to stay enabled
-        // on a restricted app. So if accessibility is already running, the grant must
-        // have been accepted at some point — even on ROMs where the AppOps query is
-        // unreliable (MIUI, ColorOS, etc.).
+        // Fallback: once setup has been completed, restricted settings were unlocked at
+        // that point and cannot be auto-revoked by the OS.  Without this check, if the
+        // OS auto-disables the accessibility service (common on MIUI, Samsung, after
+        // updates) AND AppOps is unreliable on the ROM, the user would be incorrectly
+        // prompted to unlock restricted settings again.
+        if (AppPermissionSupport.wasSetupCompletedBefore(this)) return true;
+        // Last resort for ROMs where AppOps is unreliable: if accessibility is already
+        // running, the grant must have been accepted at some point.
         return isAccessibilityEnabled();
     }
 
@@ -227,6 +231,10 @@ public class PermissionActivity extends AppCompatActivity {
     }
 
     private void goToMain() {
+        // Persist that the user has successfully completed setup at least once.
+        // MainActivity uses this to distinguish "accessibility auto-disabled by OS"
+        // (show a warning) from "never set up" (redirect to this screen).
+        AppPermissionSupport.markSetupCompleted(this);
         startActivity(new Intent(this, MainActivity.class));
         finish();
     }

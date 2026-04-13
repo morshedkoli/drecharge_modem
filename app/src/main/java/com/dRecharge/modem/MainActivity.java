@@ -233,7 +233,14 @@ public class MainActivity extends AppCompatActivity {
 
         updatePowerButtonState(false);
 
-        if (!isSetupComplete()) {
+        if (!runtimePermissionsReady()) {
+            // Runtime permissions were never granted (or were revoked) — must go through setup.
+            startActivity(new Intent(this, PermissionActivity.class));
+            finish();
+            return;
+        }
+        if (!AppPermissionSupport.wasSetupCompletedBefore(this) && !isSetupComplete()) {
+            // First-ever launch: all permissions including accessibility must be in place.
             startActivity(new Intent(this, PermissionActivity.class));
             finish();
             return;
@@ -250,19 +257,31 @@ public class MainActivity extends AppCompatActivity {
         reloadHomeFromSession();
 
 
-        // Keep screen on while the app is in the foreground (replaces the empty-Toast timer hack)
+        // Keep screen on and prevent phone lock while the app is in the foreground.
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        keepScreenOnAndDismissKeyguard();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // If the accessibility service was disabled while we were away (e.g. user toggled it off
-        // in system settings, or Android auto-disabled it), send the user back to setup.
-        if (!isSetupComplete()) {
+        // Runtime permissions can be revoked at any time by the user — always block.
+        if (!runtimePermissionsReady()) {
             startActivity(new Intent(this, PermissionActivity.class));
             finish();
             return;
+        }
+        // If the user has never completed setup, enforce all requirements.
+        if (!AppPermissionSupport.wasSetupCompletedBefore(this) && !isSetupComplete()) {
+            startActivity(new Intent(this, PermissionActivity.class));
+            finish();
+            return;
+        }
+        // Setup was done before — accessibility service may have been auto-disabled by the OS
+        // (common on MIUI, Samsung, after app updates, etc.).  Show a non-blocking dialog
+        // instead of kicking the user through the full setup screen again.
+        if (!isAccessServiceEnabled(getApplicationContext(), USSDService.class)) {
+            showAccessibilityDisabledWarning();
         }
         int selectedTheme = ThemeManager.getSelectedTheme(this);
         if (selectedTheme != appliedTheme) {
@@ -283,7 +302,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        stopPollingTimers();
+        // Do NOT stop polling timers here — the foreground service keeps the process alive
+        // and polling must continue while the screen is locked or the app is backgrounded.
+        // Timers are stopped in onDestroy() instead.
         subscriptionCheckHandler.removeCallbacks(dailySubscriptionCheckRunnable);
     }
 
@@ -455,10 +476,40 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean isRestrictedSettingsUnlocked() {
         if (AppPermissionSupport.isRestrictedSettingsUnlocked(this)) return true;
-        // Fallback: if the accessibility service is already running, restricted settings
-        // must have been granted at some point — mirrors PermissionActivity's logic so
-        // the two checks stay in sync on MIUI / ColorOS / other custom ROMs.
+        // Fallback: once setup has been completed, restricted settings were unlocked at that
+        // point and cannot be auto-revoked by the OS — treat them as still valid.
+        // (Previously this fell back to the accessibility check, which caused false negatives
+        // whenever Android auto-disabled the accessibility service.)
+        if (AppPermissionSupport.wasSetupCompletedBefore(this)) return true;
+        // For ROMs where AppOps is unreliable (MIUI, ColorOS), use accessibility as a proxy
+        // only on a true first-time setup where we know nothing yet.
         return isAccessServiceEnabled(getApplicationContext(), USSDService.class);
+    }
+
+    /**
+     * Returns true only when the runtime permissions that the app declares as required
+     * (CALL_PHONE, READ_PHONE_STATE, RECEIVE_SMS, POST_NOTIFICATIONS on API 33+) are all
+     * granted.  These are checked on every resume because the user can revoke them in
+     * Settings at any time.
+     */
+    private boolean runtimePermissionsReady() {
+        return AppPermissionSupport.hasAllRuntimePermissions(this);
+    }
+
+    /**
+     * Shows a non-blocking dialog when the accessibility service has been auto-disabled
+     * by the OS or an OEM power-management policy.  The user can re-enable it without
+     * going through the full setup screen.
+     */
+    private void showAccessibilityDisabledWarning() {
+        new AlertDialog.Builder(this)
+                .setTitle("Accessibility Service Disabled")
+                .setMessage("The USSD accessibility service was disabled (this can happen automatically after an app update or due to phone battery settings).\n\nUSSD operations won't work until you re-enable it.\n\nTap \"Enable\" to open Accessibility Settings, find \"dRecharge\" and turn it ON.")
+                .setCancelable(true)
+                .setPositiveButton("Enable Now", (d, w) ->
+                        startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
+                .setNegativeButton("Later", null)
+                .show();
     }
 
     private void loadLogo() {
@@ -1321,7 +1372,9 @@ public class MainActivity extends AppCompatActivity {
                 // যদি সেট না থাকে, ডিফল্ট 30 সেকেন্ড (30000ms) ব্যবহার করবে
                 timeInterval = 30000;
             }
-        }catch (Exception e) {
+        } catch (Exception e) {
+            // Domain/timer config failed — show feedback so the user knows
+            Toast.makeText(this, "Config load error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
 
         try{
@@ -1344,7 +1397,8 @@ public class MainActivity extends AppCompatActivity {
                     savedSim1ServiceName = session.getData(Session.SIM1_SERVICE_NAME);
                 }
             }
-        }catch (Exception e) {
+        } catch (Exception e) {
+            // SIM1 config load failed — continue with defaults from session
         }
 
         try{
@@ -1363,7 +1417,8 @@ public class MainActivity extends AppCompatActivity {
                     savedSim2ServiceName = session.getData(Session.SIM2_SERVICE_NAME);
                 }
             }
-        }catch (Exception e) {
+        } catch (Exception e) {
+            // SIM2 config load failed — continue with defaults from session
         }
 
         restartPollingTimers();
@@ -1501,42 +1556,50 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void getsSimServiceInfo() {
-        SubscriptionManager subscriptionManager = (SubscriptionManager) getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+        try {
+            SubscriptionManager subscriptionManager = (SubscriptionManager) getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
 
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
-            return;
-        }
-        List<SubscriptionInfo> subscriptionInfoList = subscriptionManager.getActiveSubscriptionInfoList();
-
-
-        if (subscriptionInfoList != null && !subscriptionInfoList.isEmpty()) {
-            SubscriptionInfo info0 = subscriptionInfoList.get(0);
-            if (info0 != null) {
-                CharSequence carrierName0 = info0.getCarrierName();
-                sim1 = carrierName0 != null ? carrierName0.toString() : "SIM";
-                sim1Id = info0.getSimSlotIndex();
-                if (info0.getNumber() != null) {
-                    sim1Num = info0.getNumber();
-                    sim1Num = sim1Num.replace("+88", "").isEmpty() ? session.getData(Session.SIM1_NUMBER) : sim1Num.replace("+88", "");
-                }
-                session.setData(Session.SIM1_ID, String.valueOf(sim1Id));
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+                return;
             }
+            List<SubscriptionInfo> subscriptionInfoList = subscriptionManager.getActiveSubscriptionInfoList();
 
-            if (subscriptionInfoList.size() >= 2) {
-                SubscriptionInfo info1 = subscriptionInfoList.get(1);
-                if (info1 != null) {
-                    CharSequence carrierName1 = info1.getCarrierName();
-                    sim2 = carrierName1 != null ? carrierName1.toString() : "SIM";
-                    sim2Id = info1.getSimSlotIndex();
 
-                    if (info1.getNumber() != null) {
-                        sim2Num = info1.getNumber();
-                        sim2Num = sim2Num.replace("+88", "").isEmpty() ? session.getData(Session.SIM2_NUMBER) : sim2Num.replace("+88", "");
+            if (subscriptionInfoList != null && !subscriptionInfoList.isEmpty()) {
+                SubscriptionInfo info0 = subscriptionInfoList.get(0);
+                if (info0 != null) {
+                    CharSequence carrierName0 = info0.getCarrierName();
+                    sim1 = carrierName0 != null ? carrierName0.toString() : "SIM";
+                    sim1Id = info0.getSimSlotIndex();
+                    if (info0.getNumber() != null) {
+                        sim1Num = info0.getNumber();
+                        sim1Num = sim1Num.replace("+88", "").isEmpty() ? session.getData(Session.SIM1_NUMBER) : sim1Num.replace("+88", "");
                     }
+                    session.setData(Session.SIM1_ID, String.valueOf(sim1Id));
+                }
 
-                    session.setData(Session.SIM2_ID, String.valueOf(sim2Id));
+                if (subscriptionInfoList.size() >= 2) {
+                    SubscriptionInfo info1 = subscriptionInfoList.get(1);
+                    if (info1 != null) {
+                        CharSequence carrierName1 = info1.getCarrierName();
+                        sim2 = carrierName1 != null ? carrierName1.toString() : "SIM";
+                        sim2Id = info1.getSimSlotIndex();
+
+                        if (info1.getNumber() != null) {
+                            sim2Num = info1.getNumber();
+                            sim2Num = sim2Num.replace("+88", "").isEmpty() ? session.getData(Session.SIM2_NUMBER) : sim2Num.replace("+88", "");
+                        }
+
+                        session.setData(Session.SIM2_ID, String.valueOf(sim2Id));
+                    }
                 }
             }
+        } catch (SecurityException e) {
+            // Some OEM ROMs throw SecurityException from getActiveSubscriptionInfoList()
+            // even when READ_PHONE_STATE is granted (requires carrier privileges on some devices).
+            // Fall back silently — SIM IDs will be loaded from session in init().
+        } catch (Exception e) {
+            // Guard against any unexpected device-specific crashes from SubscriptionManager.
         }
     }
 
@@ -1997,19 +2060,16 @@ public class MainActivity extends AppCompatActivity {
             default:
                 // যদি কোনো সেবা মিলে না, প্রসেসিং ফ্ল্যাগ রিসেট করুন এবং পরবর্তী রিকোয়েস্ট প্রসেস করুন
                 // If no service matches, reset processing flag and process next request
-                if (simSlotId == sim1Id) {
-                    isProcessingSim1 = false;
-                } else {
-                    isProcessingSim2 = false;
-                }
-                processNextInQueue(simSlotId);
+                // Use onRequestCompleted() which correctly resets BOTH per-SIM and global lock flags.
+                // Previously, isAnySimProcessing was not reset here, causing a permanent processing lock.
+                onRequestCompleted(simSlotId);
                 break;
         }
     }
 
     // রিকোয়েস্ট সম্পন্ন হলে কল করুন - পরবর্তী রিকোয়েস্ট প্রসেস করার জন্য
     // Call this when request is completed - to process next request
-    private void onRequestCompleted(int simSlotId) {
+    private synchronized void onRequestCompleted(int simSlotId) {
         cancelSafetyTimeout(simSlotId);
         // প্রসেসিং ফ্ল্যাগ রিসেট করুন
         // Reset processing flag
@@ -3734,6 +3794,27 @@ public class MainActivity extends AppCompatActivity {
     public void finish() {
         stopPollingTimers();
         super.finish();
+    }
+
+    /**
+     * Keeps the screen on and prevents the phone from locking while MainActivity is visible.
+     * Uses the modern KeyguardManager API on Android O+ and the legacy window flag on older versions.
+     */
+    private void keepScreenOnAndDismissKeyguard() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+            android.app.KeyguardManager km =
+                    (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            if (km != null) {
+                km.requestDismissKeyguard(this, null);
+            }
+        } else {
+            getWindow().addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                            | android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+                            | android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+        }
     }
 
     @Override
