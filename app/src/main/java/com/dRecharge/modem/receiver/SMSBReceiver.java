@@ -3,7 +3,6 @@ package com.dRecharge.modem.receiver;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.net.ConnectivityManager;
@@ -19,6 +18,8 @@ import com.dRecharge.modem.helper.Session;
 import com.dRecharge.modem.server.ModemServerRepository;
 
 import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import static com.dRecharge.modem.helper.Constant.sim1Id;
 import static com.dRecharge.modem.helper.Constant.sim2Id;
@@ -26,6 +27,8 @@ import static com.dRecharge.modem.helper.Session.SIM1_SERVICE_CODE;
 import static com.dRecharge.modem.helper.Session.SIM2_SERVICE_CODE;
 
 public class SMSBReceiver extends BroadcastReceiver {
+
+    private static final Executor executor = Executors.newSingleThreadExecutor();
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -45,7 +48,7 @@ public class SMSBReceiver extends BroadcastReceiver {
         final PendingResult result = goAsync();
         ModemServerRepository serverRepository = ModemServerRepository.fromSession(session);
 
-        AsyncTask.execute(() -> {
+        executor.execute(() -> {
             try {
                 // C5: Guard against null pdusObj
                 final Object[] pdusObj = (Object[]) bundle.get("pdus");

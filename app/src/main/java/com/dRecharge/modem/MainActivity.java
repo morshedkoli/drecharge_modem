@@ -3574,29 +3574,36 @@ public class MainActivity extends AppCompatActivity {
         if (!ensureSubscriptionActive()) {
             return;
         }
-        if (!isNetworkAvailable()) {
-            return;
-        }
         if (serverRepository == null) {
             return;
         }
 
-        serverRepository.insertMessage(message, null, st, currentRequestPcode, resolveRequestSender(senderNum), simNumber,
-                String.valueOf(simSlot), null, new ModemServerRepository.MessageInsertCallback() {
-                    @Override
-                    public void onSuccess(InsertMessageModel response) {
-                        if (response.hasStatus("1")) {
-                            try {
-                                updateResultTv(simSlot, response.getMsg());
-                            } catch (Exception ignored) {
+        // Capture fields now — they may change before the delayed call executes
+        final String pcode = currentRequestPcode;
+        final String sender = resolveRequestSender(senderNum);
+
+        // On Android 11+ the data connection is briefly suspended during a USSD call.
+        // Delay 1500 ms so the data network has time to restore before we hit the server.
+        handler.postDelayed(() -> {
+            if (serverRepository == null) return;
+            if (!isNetworkAvailable()) return;
+            serverRepository.insertMessage(message, null, st, pcode, sender, simNumber,
+                    String.valueOf(simSlot), null, new ModemServerRepository.MessageInsertCallback() {
+                        @Override
+                        public void onSuccess(InsertMessageModel response) {
+                            if (response.hasStatus("1")) {
+                                try {
+                                    updateResultTv(simSlot, response.getMsg());
+                                } catch (Exception ignored) {
+                                }
                             }
                         }
-                    }
 
-                    @Override
-                    public void onFailure(Throwable throwable) {
-                    }
-                });
+                        @Override
+                        public void onFailure(Throwable throwable) {
+                        }
+                    });
+        }, 1500);
     }
     //endregion InsertNewPopUpMessage
 

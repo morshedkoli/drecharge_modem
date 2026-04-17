@@ -149,7 +149,11 @@ public class KeepAliveService extends Service {
             if (largeLogo == null) largeLogo = getDefaultColorLogo(ctx);
             if (largeLogo != null) builder.setLargeIcon(largeLogo);
 
-            nm.notify(NOTIFICATION_ID, builder.build());
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                    || ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.POST_NOTIFICATIONS)
+                            == PackageManager.PERMISSION_GRANTED) {
+                nm.notify(NOTIFICATION_ID, builder.build());
+            }
         }
     }
 

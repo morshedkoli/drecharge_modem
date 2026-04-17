@@ -10,4 +10,4 @@
     android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
     android:description="@string/ussd_service_description"
-    android:notificationTimeout="400" />
+    android:notificationTimeout="1000" />
