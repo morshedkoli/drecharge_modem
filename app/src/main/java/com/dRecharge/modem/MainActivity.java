@@ -124,6 +124,8 @@ public class MainActivity extends AppCompatActivity {
     private HashMap<String, HashSet<String>> map;
     private Session session;
     private static WeakReference<MainActivity> insRef;
+    /** True while the activity is between onResume and onStop — i.e. visible to the user. */
+    private static volatile boolean isInForeground = false;
     private String sim_number, op_code, op;
     private String currentRequestPcode = "";
     private String currentRequestSender = "";
@@ -265,6 +267,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        isInForeground = true;
         // Runtime permissions can be revoked at any time by the user — always block.
         if (!runtimePermissionsReady()) {
             startActivity(new Intent(this, PermissionActivity.class));
@@ -300,6 +303,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onStop() {
+        super.onStop();
+        // Mark that the activity is no longer visible — this lets KeepAliveService
+        // take over USSD polling immediately rather than waiting for the WeakReference
+        // to be garbage collected.
+        isInForeground = false;
+    }
+
+    @Override
     protected void onPause() {
         super.onPause();
         // Do NOT stop polling timers here — the foreground service keeps the process alive
@@ -310,6 +322,16 @@ public class MainActivity extends AppCompatActivity {
 
     public static MainActivity getMainActivityInstance() {
         return insRef != null ? insRef.get() : null;
+    }
+
+    /**
+     * Returns true only when the activity is visible to the user (between onResume and onStop).
+     * This is used by KeepAliveService to decide whether the activity or the service
+     * should own USSD polling. Unlike getMainActivityInstance(), this is deterministic
+     * and not subject to GC timing.
+     */
+    public static boolean isActivityInForeground() {
+        return isInForeground;
     }
 
     private void openSettingsScreen() {

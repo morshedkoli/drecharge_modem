@@ -11,6 +11,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -160,8 +161,39 @@ public class USSDController implements USSDInterface, USSDApi {
             }
         }
         boolean hasCallPermission = hasCallPermission();
-        // Android 14+ (API 34): ACTION_CALL no longer auto-dials USSD/MMI - only default dialer can.
-        // Use ACTION_DIAL so dialer opens with number pre-filled; user taps dial (Accessibility will handle).
+
+        // ── Primary path: TelecomManager.placeCall() ──────────────────────────
+        // On Android 10+ (API 29), background activity starts are blocked which
+        // prevents context.startActivity(ACTION_CALL) from working when the app
+        // is not in the foreground.  TelecomManager.placeCall() is exempt from
+        // this restriction because it goes through the Telecom framework directly
+        // and is available from any context (including foreground services).
+        if (hasCallPermission && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                TelecomManager telecomManager = (TelecomManager)
+                        context.getSystemService(Context.TELECOM_SERVICE);
+                if (telecomManager != null) {
+                    Bundle extras = new Bundle();
+                    // Select the correct SIM slot
+                    try {
+                        List<PhoneAccountHandle> accounts = telecomManager.getCallCapablePhoneAccounts();
+                        if (accounts != null && accounts.size() > simSlot) {
+                            extras.putParcelable("android.telecom.extra.PHONE_ACCOUNT_HANDLE",
+                                    accounts.get(simSlot));
+                        }
+                    } catch (SecurityException ignored) {
+                    }
+                    telecomManager.placeCall(uriPhone, extras);
+                    scheduleTimeout();
+                    return;
+                }
+            } catch (Exception e) {
+                // Fall through to startActivity fallback
+            }
+        }
+
+        // ── Fallback: startActivity ───────────────────────────────────────────
+        // Used on older devices (< API 23) or when TelecomManager isn't available.
         boolean useCallAction = hasCallPermission && Build.VERSION.SDK_INT < 34;
         Intent intent = getActionCallIntent(uriPhone, simSlot, useCallAction);
         try {

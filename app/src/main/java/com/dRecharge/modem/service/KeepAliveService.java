@@ -23,10 +23,14 @@ import android.content.pm.PackageManager;
 
 import androidx.core.app.NotificationCompat;
 
+import com.dRecharge.modem.ussd.AccessibilityUtils;
+import com.dRecharge.modem.ussd.USSDService;
+
 import com.dRecharge.modem.MainActivity;
 import com.dRecharge.modem.R;
 import com.dRecharge.modem.apimodel.InsertMessageModel;
 import com.dRecharge.modem.helper.Constant;
+import com.dRecharge.modem.helper.BuiltInUssdResolver;
 import com.dRecharge.modem.helper.ServiceCatalog;
 import com.dRecharge.modem.helper.ServiceConfig;
 import com.dRecharge.modem.helper.Session;
@@ -46,7 +50,19 @@ import java.util.Queue;
 public class KeepAliveService extends Service {
 
     private static final String CHANNEL_ID = "drecharge_keepalive";
+    private static final String ALERT_CHANNEL_ID = "drecharge_accessibility_alert";
     static final int NOTIFICATION_ID = 1001;
+    private static final int ACCESSIBILITY_ALERT_ID = 1003;
+
+    // =========================================================================
+    // Accessibility Health Monitoring
+    // Periodically checks if the accessibility service is still enabled.
+    // If the OS has auto-disabled it, shows a persistent notification to
+    // alert the user (since the app may be running in the background).
+    // =========================================================================
+    private static final long HEALTH_CHECK_INTERVAL_MS = 60_000L; // check every 60s
+    private Runnable healthCheckRunnable;
+    private boolean lastKnownAccessibilityState = true;
 
     /** Keeps the CPU awake so background USSD polling works even when the screen is off. */
     private PowerManager.WakeLock wakeLock;
@@ -163,9 +179,17 @@ public class KeepAliveService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(NOTIFICATION_ID, buildNotification());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // Android 14+ requires specifying the foreground service types at runtime.
+            startForeground(NOTIFICATION_ID, buildNotification(),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                            | android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL);
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification());
+        }
         acquireWakeLock();
         startBgPolling();
+        startAccessibilityHealthCheck();
         return START_STICKY;
     }
 
@@ -178,6 +202,7 @@ public class KeepAliveService extends Service {
     public void onDestroy() {
         super.onDestroy();
         stopBgPolling();
+        stopAccessibilityHealthCheck();
         releaseWakeLock();
     }
 
@@ -242,8 +267,11 @@ public class KeepAliveService extends Service {
     // =========================================================================
 
     private void doBgPoll() {
-        // If the activity is alive it owns the polling timers — skip to avoid duplicates.
-        if (MainActivity.getMainActivityInstance() != null) return;
+        // Only skip background polling when the activity is actively visible in the
+        // foreground — it has its own polling timers that handle USSD dialing from
+        // the activity context.  When the app is backgrounded, the service takes over
+        // immediately (the old check used a WeakReference which was non-deterministic).
+        if (MainActivity.isActivityInForeground()) return;
 
         Session s = getBgSession();
         if (s == null || !s.isDomainValid()) return;
@@ -395,8 +423,17 @@ public class KeepAliveService extends Service {
         // Resolve USSD steps from custom template.
         List<String> steps = UssdDialTemplateResolver.resolveSteps(svcCfg, req.type, phone, amount, req.simPin);
         if (steps.isEmpty()) {
-            // No custom USSD template configured — the built-in per-carrier logic lives in
-            // MainActivity.  Release the lock so MainActivity can handle it when it opens.
+            // No custom template — try built-in carrier USSD codes.
+            // This covers standard services (Grameen, Robi, bKash, etc.) that
+            // have hardcoded USSD patterns in the MainActivity.  Without this
+            // fallback, those requests would get stuck in 'waiting' whenever
+            // the app is in the background.
+            steps = BuiltInUssdResolver.resolve(
+                    req.service, req.pcode, phone, amount, req.simPin,
+                    req.type, req.powerLoad, req.packageName);
+        }
+        if (steps.isEmpty()) {
+            // Still no steps — unknown service. Skip and release the lock.
             bgOnDone(req.simSlotId);
             return;
         }
@@ -719,7 +756,98 @@ public class KeepAliveService extends Service {
             channel.setShowBadge(false);
             channel.setSound(null, null);
             NotificationManager nm = getSystemService(NotificationManager.class);
-            if (nm != null) nm.createNotificationChannel(channel);
+            if (nm != null) {
+                nm.createNotificationChannel(channel);
+
+                // Alert channel — higher priority so the user notices when
+                // the OS has auto-disabled the accessibility service.
+                NotificationChannel alertChannel = new NotificationChannel(
+                        ALERT_CHANNEL_ID,
+                        "Accessibility Alerts",
+                        NotificationManager.IMPORTANCE_HIGH);
+                alertChannel.setDescription("Alerts when the USSD accessibility service is disabled by the system");
+                alertChannel.setShowBadge(true);
+                nm.createNotificationChannel(alertChannel);
+            }
+        }
+    }
+
+    // =========================================================================
+    // Accessibility Health Monitoring
+    // =========================================================================
+
+    private void startAccessibilityHealthCheck() {
+        stopAccessibilityHealthCheck();
+        healthCheckRunnable = new Runnable() {
+            @Override
+            public void run() {
+                checkAccessibilityHealth();
+                bgHandler.postDelayed(this, HEALTH_CHECK_INTERVAL_MS);
+            }
+        };
+        // Run first check after a short delay to let the system settle after boot.
+        bgHandler.postDelayed(healthCheckRunnable, 10_000L);
+    }
+
+    private void stopAccessibilityHealthCheck() {
+        if (healthCheckRunnable != null) {
+            bgHandler.removeCallbacks(healthCheckRunnable);
+            healthCheckRunnable = null;
+        }
+    }
+
+    private void checkAccessibilityHealth() {
+        boolean isEnabled = AccessibilityUtils.isAccessibilityFullyEnabled(
+                getApplicationContext(), USSDService.class);
+
+        if (!isEnabled && lastKnownAccessibilityState) {
+            // Accessibility just went from enabled → disabled.
+            // Show a persistent, high-priority notification.
+            showAccessibilityLostNotification();
+        } else if (isEnabled && !lastKnownAccessibilityState) {
+            // User re-enabled accessibility — clear the alert.
+            clearAccessibilityLostNotification();
+        }
+
+        lastKnownAccessibilityState = isEnabled;
+    }
+
+    private void showAccessibilityLostNotification() {
+        createChannel(); // ensure channels exist
+
+        Intent accessibilityIntent = new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        accessibilityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        PendingIntent enablePi = PendingIntent.getActivity(
+                this, 100, accessibilityIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification_drecharge)
+                .setContentTitle("⚠ Accessibility Disabled")
+                .setContentText("USSD service stopped working. Tap to re-enable.")
+                .setStyle(new NotificationCompat.BigTextStyle()
+                        .bigText("The system has disabled the dRecharge accessibility service. "
+                                + "USSD recharge operations will not work until you re-enable it.\n\n"
+                                + "Tap this notification → find \"dRecharge\" → toggle it ON."))
+                .setContentIntent(enablePi)
+                .setAutoCancel(true)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH);
+
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                    || ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED) {
+                nm.notify(ACCESSIBILITY_ALERT_ID, builder.build());
+            }
+        }
+    }
+
+    private void clearAccessibilityLostNotification() {
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) {
+            nm.cancel(ACCESSIBILITY_ALERT_ID);
         }
     }
 }

@@ -3,11 +3,17 @@
   Event types and flags here must match what onServiceConnected() sets at runtime.
   The XML declaration is what Android uses as the authoritative source on many OEMs
   (MIUI, Samsung, ColorOS) — mismatches can cause the service to be silently downgraded.
+
+  IMPORTANT — every field set here MUST also be set identically in onServiceConnected().
+  Mismatches cause the OS to silently disable the service on some devices.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewTextChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews"
     android:canRetrieveWindowContent="true"
+    android:canRequestFilterKeyEvents="false"
+    android:isAccessibilityTool="true"
     android:description="@string/ussd_service_description"
-    android:notificationTimeout="1000" />
+    android:notificationTimeout="1000"
+    android:settingsActivity="com.dRecharge.modem.SettingsActivity" />

@@ -499,15 +499,34 @@ public class USSDService extends AccessibilityService {
         // Creating a new AccessibilityServiceInfo() and calling setServiceInfo() with it
         // would wipe out canRetrieveWindowContent (and other XML-declared capabilities),
         // which can cause the system to invalidate the service on some devices.
-        AccessibilityServiceInfo info = getServiceInfo();
-        if (info != null) {
-            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                    | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-                    | AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED;
-            info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
-            info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-                    | AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
-            setServiceInfo(info);
+        try {
+            AccessibilityServiceInfo info = getServiceInfo();
+            if (info != null) {
+                info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                        | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                        | AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED;
+                info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC;
+                info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+                        | AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
+
+                // CRITICAL: notificationTimeout MUST match the XML config (1000ms).
+                // If omitted, the value defaults to 0 which differs from the XML
+                // declaration. On MIUI, Samsung, and ColorOS this mismatch causes
+                // the system to silently downgrade or disable the service.
+                info.notificationTimeout = 1000;
+
+                // Android 13+: request the shortcut warning dialog so accidental
+                // volume-key combos show a confirmation instead of silently toggling
+                // the service off.
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_SHORTCUT_WARNING_DIALOG_SPOKEN_FEEDBACK;
+                }
+
+                setServiceInfo(info);
+            }
+        } catch (Exception e) {
+            // Swallow any exception — a crash here causes the OS to permanently
+            // disable the accessibility service, requiring manual re-enablement.
         }
     }
 
